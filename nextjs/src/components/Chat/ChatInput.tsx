@@ -34,6 +34,8 @@ import UploadFileInput, { getResponseModel } from './UploadFileInput';
 import { RootState } from '@/lib/store';
 import { setChatMessageAction, setUploadDataAction } from '@/lib/slices/aimodel/conversation';
 import usePrompt from '@/hooks/prompt/usePrompt';
+import CustomPromptAction from '@/actions/CustomPromptAction';
+import CustomBotAction from '@/actions/CustomTemplateAction';
 import useMediaUpload from '@/hooks/common/useMediaUpload';
 import PromptEnhance from './PromptEnhance';
 import BookmarkDialog from './BookMark';
@@ -52,9 +54,9 @@ import useConversation from '@/hooks/conversation/useConversation';
 import { useThunderBoltPopup } from '@/hooks/conversation/useThunderBoltPopup';
 import ChatInputFileLoader from '@/components/Loader/ChatInputFileLoader';
 import { setSelectedBrain } from '@/lib/slices/brain/brainlist';
-import useCustomGpt from '@/hooks/customgpt/useCustomGpt';
 import { LINK } from '@/config/config';
 import defaultCustomGptImage from '../../../public/defaultgpt.jpg';
+import useCustomGpt from '@/hooks/customgpt/useCustomGpt';
 import ThreeDotLoader from '@/components/Loader/ThreeDotLoader';
 import useIntersectionObserver from '@/hooks/common/useIntersectionObserver';
 import useDebounce from '@/hooks/common/useDebounce';
@@ -190,6 +192,8 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
     const [isNavigating, setIsNavigating] = useState(false);
     const [searchValue, setSearchValue] = useState('');
     const { toolStates, setToolStates } = useMCP();
+    const [randomPrompts, setRandomPrompts] = useState<BrainPromptType[]>([]);
+    const [customPrompts, setCustomPrompts] = useState([]);
 
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const dispatch = useDispatch();
@@ -206,11 +210,8 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
     const { getDecodedObjectId } = useConversationHelper();
     const {
         loading,
-        setPromptList,
-        getTabPromptList,
         paginator,
         setLoading,
-        promptList:prompts,
     } = usePrompt();
     const { fileInputRef, fileLoader, handleFileChange, handlePasteFiles } = useMediaUpload({
         selectedAIModal: selectedAiModal,
@@ -232,6 +233,114 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
         uploadedFile,
         setText: setMessage,
     });
+
+    // Function to get random prompts
+    const getRandomPrompts = useCallback((prompts: BrainPromptType[], count: number = 4) => {
+        if (!prompts || prompts.length === 0) return [];
+        
+        const shuffled = [...prompts].sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, count);
+    }, []);
+
+    // Function to fetch custom prompts
+    const fetchCustomPrompts = useCallback(async () => {
+        try {
+            const prompts = await CustomPromptAction('', null);
+            setCustomPrompts(prompts);
+            const random = getRandomPrompts(prompts, 4);
+            setRandomPrompts(random);
+        } catch (error) {
+            console.error('Error fetching custom prompts:', error);
+        }
+    }, [getRandomPrompts]);
+
+    // Function to search custom prompts
+    const searchCustomPrompts = useCallback(async (searchValue: string) => {
+        try {
+            const prompts = await CustomPromptAction(searchValue, null);
+            setCustomPrompts(prompts);
+            setHandlePrompts(prompts);
+        } catch (error) {
+            console.error('Error searching custom prompts:', error);
+        }
+    }, []);
+
+    // Function to get random agents
+    const getRandomAgents = useCallback((agents: BrainAgentType[], count: number = 5) => {
+        if (!agents || agents.length === 0) return [];
+        
+        const shuffled = [...agents].sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, count);
+    }, []);
+
+    // Function to fetch custom agents
+    const fetchCustomAgents = useCallback(async () => {
+        try {
+            const agents = await CustomBotAction('');
+            setCustomAgents(agents);
+            const random = getRandomAgents(agents, 5);
+            setRandomAgents(random);
+        } catch (error) {
+            console.error('Error fetching custom agents:', error);
+        }
+    }, [getRandomAgents]);
+
+    // Function to search custom agents
+    const searchCustomAgents = useCallback(async (searchValue: string) => {
+        try {
+            const agents = await CustomBotAction(searchValue);
+            setCustomAgents(agents);
+        } catch (error) {
+            console.error('Error searching custom agents:', error);
+        }
+    }, []);
+
+    // Function to truncate text with title and content totaling 250 characters
+    const getTruncatedPromptText = useCallback((title: string, content: string, maxLength: number = 250) => {
+        const titleLength = title.length;
+        const availableLength = Math.max(maxLength - titleLength - 3, 0); // -3 for "..."
+        
+        if (content.length <= availableLength) {
+            return content;
+        }
+        
+        return content.slice(0, availableLength) + '...';
+    }, []);
+
+    // Fetch custom prompts and agents on component mount
+    useEffect(() => {
+        fetchCustomPrompts();
+        fetchCustomAgents();
+    }, [fetchCustomPrompts, fetchCustomAgents]);
+
+    // Update random agents when customgptList changes - moved after customgptList declaration
+
+    // Handle prompt selection
+    const handlePromptClick = (prompt: BrainPromptType) => {
+        const summaries = prompt?.summaries
+            ? Object.values(prompt.summaries)
+                .map((currSummary: any) => `${currSummary.website} : ${currSummary.summary}`)
+                .join('\n')
+            : '';
+        const promptContent = prompt.content + (summaries ? '\n' + summaries : '');
+        onSelectMenu(GPTTypes.Prompts, prompt);
+        setMessage(promptContent);
+    };
+
+    // Handle See More navigation
+    const handleSeeMoreClick = () => {
+        router.push('/custom-templates?tab=prompttemplate');
+    };
+
+    // Handle agent selection
+    const handleAgentClick = (agent: BrainAgentType) => {
+        onSelectMenu(GPTTypes.CustomGPT, agent);
+    };
+
+    // Handle Agent See More navigation
+    const handleAgentSeeMoreClick = () => {
+        router.push('/custom-templates?tab=bottemplate');
+    };
 
     const DefaultListOption = React.memo(({ brain } : { brain: BrainListType }) => {
         const router = useRouter();
@@ -285,7 +394,7 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                 {listOptions.map((option) => (
                     <button
                         key={option.id}
-                        className="flex text-font-14 flex-row items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1 sm:py-2 rounded-md border border-gray-300 bg-white hover:bg-b12"
+                        className="flex text-font-14 z-10 flex-row items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1 sm:py-2 rounded-md border border-gray-300 bg-white transition-all ease-in-out duration-500 hover:shadow-lg"
                         onClick={() => handleNavigation(option.href)}
                     >
                         <div className="flex items-center justify-center">
@@ -498,9 +607,9 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
     }, [selectedAiModal,currentUser]);
 
     useEffect(() => {
-        if(prompts?.length > 0){
+        if(customPrompts?.length > 0){
             if(message){
-                const updateIsActive = prompts.map((currPrompt) => {
+                const updateIsActive = customPrompts.map((currPrompt) => {
                     if(currPrompt.content){
                         const summaries = currPrompt?.summaries 
                             ? Object.values(currPrompt.summaries)
@@ -517,12 +626,12 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
 
                 setHandlePrompts(updateIsActive);
             }else{
-                setHandlePrompts(prompts);
+                setHandlePrompts(customPrompts);
             }
         }else{
-            setHandlePrompts(prompts)
+            setHandlePrompts(customPrompts)
         }
-    }, [prompts, message]);
+    }, [customPrompts, message]);
 
     // Auto-adjust textarea height based on content
     useEffect(() => {
@@ -605,37 +714,28 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
     }, [showAgentList, showPromptList]);
 
 
-    const {
-        customgptList,
-        loading: customgptLoading,
-        getTabAgentList,
-        paginator: agentPaginator,
-        setCustomGptList
-    } = useCustomGpt();
+
+    // Note: Random agents are now updated in fetchCustomAgents function
 
     const [debouncedSearchValue] = useDebounce(searchValue, 500);
 
     useEffect(() => {
         if (debouncedSearchValue) {
-            setCustomGptList([]);
-            getTabAgentList(debouncedSearchValue);
-            setPromptList([]);
-            getTabPromptList(debouncedSearchValue);
+            // Search custom agents instead of using getTabAgentList
+            searchCustomAgents(debouncedSearchValue);
+            // Search custom prompts instead of using getTabPromptList
+            searchCustomPrompts(debouncedSearchValue);
         } else {
-            setCustomGptList([]);
-            getTabAgentList('');
-            setPromptList([]);
-            getTabPromptList('');
+            // Reset to all custom agents and prompts
+            fetchCustomAgents();
+            fetchCustomPrompts();
         }
-    }, [debouncedSearchValue]);
+    }, [debouncedSearchValue, searchCustomPrompts, fetchCustomPrompts, searchCustomAgents, fetchCustomAgents]);
 
     const gptListRef = useIntersectionObserver(() => {
-        if (agentPaginator.hasNextPage && !customgptLoading) {
-            getTabAgentList(searchValue, {
-                offset: agentPaginator.offset + agentPaginator.perPage, limit: agentPaginator.perPage 
-            });
-        }
-    }, [agentPaginator?.hasNextPage, !customgptLoading]);
+        // Note: Custom agents don't use pagination, so this observer is not needed
+        // Keeping for compatibility but it won't trigger any action
+    }, []);
 
     const handleAgentSelection = (gpt) => {
         onSelectMenu(GPTTypes.CustomGPT, gpt);
@@ -653,18 +753,118 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
         }
         return systemPrompt;
     };
-
     const handleToolStatesChange = (newToolStates: Record<string, string[]>) => {
         setToolStates(newToolStates);
         // The persistence is automatically handled in the Redux slice
     };
 
     return (
-        <>
-        <div className="w-full h-full flex items-center justify-center">
-            <div className={`w-full mx-auto px-5 md:max-w-[32rem] lg:max-w-[40rem] xl:max-w-[48.75rem] ${isNavigating ? 'opacity-50' : ''}`}>
-                <h1 className='text-center mb-4 font-bold text-font-24'>Hello, {currentUser?.fname} 👋🏻 </h1>
-                <h2 className='text-center mb-4 text-font-16 text-b6'>How Weam can help you today?</h2>
+        <div className="w-full h-full flex justify-center overflow-y-auto">
+            <div className={`w-full flex flex-col mx-auto px-5 md:max-w-[32rem] lg:max-w-[980px] xl:max-w-[1100px] ${isNavigating ? 'opacity-50' : ''}`}>
+                <div className='flex justify-between items-center'>
+                    <h2 className='hidden lg:block text-font-14 font-bold mt-5 mb-3'>Your Daily AI Smart Suggestions</h2>
+                    <p className="text-right hidden lg:block">
+                        <button 
+                            onClick={handleSeeMoreClick}
+                            className='text-font-14 text-blue2 underline hover:text-blue font-bold transition-colors'
+                        >
+                            See More
+                        </button>
+                    </p>
+                </div>
+
+                <div className='hidden lg:grid md:grid-cols-4 gap-4 mb-10'>
+                    {randomPrompts.map((prompt, index) => (
+                        <div 
+                            key={prompt._id || index}
+                            className='border rounded-md p-5 bg-white hover:bg-b12 cursor-pointer transition-colors'
+                            onClick={() => handlePromptClick(prompt)}
+                        >
+                            <h3 className='text-font-14 font-bold mb-2'>{prompt.title}</h3>
+                            <p className='text-font-14 text-b6'>
+                                {getTruncatedPromptText(prompt.title, prompt.content, 350)}
+                            </p>
+                        </div>
+                    ))}
+                    {randomPrompts.length === 0 && (
+                        <React.Fragment>
+                            <div className='border rounded-md p-5 bg-white hover:bg-b12 cursor-pointer'>
+                                <h3 className='text-font-14 font-bold text-b5'>Loading...</h3>
+                                <p className='text-font-14 text-b8'>Please wait while we load prompts...</p>
+                            </div>
+                            <div className='border rounded-md p-5 bg-white hover:bg-b12 cursor-pointer'>
+                                <h3 className='text-font-14 font-bold text-b5'>Loading...</h3>
+                                <p className='text-font-14 text-b8'>Please wait while we load prompts...</p>
+                            </div>
+                            <div className='border rounded-md p-5 bg-white hover:bg-b12 cursor-pointer'>
+                                <h3 className='text-font-14 font-bold text-b5'>Loading...</h3>
+                                <p className='text-font-14 text-b8'>Please wait while we load prompts...</p>
+                            </div>
+                            <div className='border rounded-md p-5 bg-white hover:bg-b12 cursor-pointer'>
+                                <h3 className='text-font-14 font-bold text-b5'>Loading...</h3>
+                                <p className='text-font-14 text-b8'>Please wait while we load prompts...</p>
+                            </div>
+                        </React.Fragment>
+                    )}
+                </div>
+                
+                <div className='hidden lg:grid grid-cols-5 gap-4 mb-5'>
+                    {randomAgents.map((agent, index) => (
+                        <div 
+                            key={agent._id || index}
+                            className='border rounded-md px-4 py-2 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer transition-colors'
+                            onClick={() => handleAgentClick(agent)}
+                        >
+                            <Image
+                                src={
+                                    agent?.coverImg?.uri
+                                        ? `${LINK.AWS_S3_URL}${agent.coverImg.uri}`
+                                        : agent?.charimg
+                                        ? agent.charimg
+                                        : defaultCustomGptImage.src
+                                }
+                                height={24}
+                                width={24}
+                                className="w-6 h-6 object-contain rounded-custom"
+                                alt={agent?.coverImg?.name || agent?.charimg ? 'Agent Image' : 'Default Image'}
+                            />
+                            <span className="text-b2 font-medium text-xs truncate">{agent.title}</span>
+                        </div>
+                    ))}
+                    {randomAgents.length === 0 && (
+                        <React.Fragment>
+                            <div className='border rounded-md px-4 py-2 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer'>
+                                <div className="w-6 h-6 bg-gray-200 rounded animate-pulse"></div>
+                                <span className="text-gray-400 text-xs">Loading...</span>
+                            </div>
+                            <div className='border rounded-md px-4 py-2 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer'>
+                                <div className="w-6 h-6 bg-gray-200 rounded animate-pulse"></div>
+                                <span className="text-gray-400 text-xs">Loading...</span>
+                            </div>
+                            <div className='border rounded-md px-4 py-2 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer'>
+                                <div className="w-6 h-6 bg-gray-200 rounded animate-pulse"></div>
+                                <span className="text-gray-400 text-xs">Loading...</span>
+                            </div>
+                            <div className='border rounded-md px-4 py-2 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer'>
+                                <div className="w-6 h-6 bg-gray-200 rounded animate-pulse"></div>
+                                <span className="text-gray-400 text-xs">Loading...</span>
+                            </div>
+                            <div className='border rounded-md px-4 py-2 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer'>
+                                <div className="w-6 h-6 bg-gray-200 rounded animate-pulse"></div>
+                                <span className="text-gray-400 text-xs">Loading...</span>
+                            </div>
+                        </React.Fragment>
+                    )}
+                </div>
+                <p className='text-font-14 mb-5 hidden lg:block'>Agents work best when you assign them a clear role. 
+                    <button 
+                        onClick={handleAgentSeeMoreClick}
+                        className='text-blue2 hover:text-blue underline transition-colors ml-1'
+                    >
+                        See More
+                    </button>
+                </p>
+                
                 {(showAgentList || showPromptList) && (
                     <div ref={agentPromptDropdownRef}>
                         {showAgentList && (
@@ -687,8 +887,8 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                                     </div>
                                     <div className="pr-1 h-full overflow-y-auto max-md:overflow-x-hidden w-full max-h-[250px]">
                                         {
-                                            customgptList.length > 0 && (
-                                            customgptList.map((gpt: BrainAgentType, index: number, gptArray: BrainAgentType[]) => {
+                                            customAgents.length > 0 && (
+                                            customAgents.map((gpt: BrainAgentType, index: number, gptArray: BrainAgentType[]) => {
                                                 const isSelected = uploadedFile?.some((file: UploadedFileType) => file?._id === gpt._id);
                                                 
                                                 return (
@@ -736,7 +936,7 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                                             )
                                         }
                                         {
-                                            customgptLoading && (
+                                            loading && (
                                                 <ThreeDotLoader className="justify-start ml-8 mt-3" />
                                             )
                                         }
@@ -814,88 +1014,94 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                             </div>
                         )}
                     </div>
-                    )}
-
-                <div className="flex flex-col text-font-16 mx-auto group overflow-hidden rounded-[18px] [&:has(textarea:focus)]:shadow-[0_2px_6px_rgba(0,0,0,.05)] w-full flex-grow relative border border-b11">
-                    <UploadFileInput
-                        removeFile={removeSelectedFile}
-                        fileData={uploadedFile}
-                    />
-                    {fileLoader && (<ChatInputFileLoader />)}
-                    <TextAreaBox
-                        message={message}
-                        handleChange={handleTextAreaChange}
-                        handleKeyDown={handleKeyDown}
-                        isDisable={isDisable}
-                        autoFocus={isWebSearchActive}
-                        onPaste={handlePasteFiles}
-                        ref={textareaRef}
-                    />
-                    <div className="flex items-center z-10 px-4 pb-[6px] mt-2">
-                        <ThunderBoltDialog
-                            isWebSearchActive={isWebSearchActive}
-                            dialogOpen={dialogOpen}
-                            uploadedFile={uploadedFile}
-                            setDialogOpen={setDialogOpen}
-                            onSelect={onSelectMenu}
-                            selectedContext={selectedContext}
-                            handlePrompts={handlePrompts}
-                            setHandlePrompts={setHandlePrompts}
-                            getList={getTabPromptList}
-                            promptLoader={loading}
-                            setPromptLoader={setLoading}
-                            paginator={paginator}
-                            setPromptList={setPromptList}
-                            promptList={prompts}
-                            handleSubmitPrompt={handleInitialMessage}
+                )}
+                <div className='relative mt-auto'>
+                    <div className='absolute top-0 left-0 right-0 mx-auto w-[95%] h-[40px]' style={{
+                        background: 'linear-gradient(90deg, #9D80ED 0%, #CD8AE1 50%, #F74649 100%)',
+                        filter: 'blur(99px)'
+                    }}></div>
+                    <div className="bg-white flex-none mt-auto flex flex-col text-font-16 mx-auto group overflow-hidden rounded-[18px] [&:has(textarea:focus)]:shadow-[0_2px_6px_rgba(0,0,0,.05)] w-full relative border border-b10">
+                        <UploadFileInput
+                            removeFile={removeSelectedFile}
+                            fileData={uploadedFile}
                         />
-                        <AttachMentToolTip
-                            fileLoader={fileLoader}
-                            isWebSearchActive={isWebSearchActive}
-                            handleAttachButtonClick={handleAttachButtonClick}
+                        {fileLoader && (<ChatInputFileLoader />)}
+                        <TextAreaBox
+                            message={message}
+                            handleChange={handleTextAreaChange}
+                            handleKeyDown={handleKeyDown}
+                            isDisable={isDisable}
+                            autoFocus={isWebSearchActive}
+                            onPaste={handlePasteFiles}
+                            ref={textareaRef}
                         />
-                        <BookmarkDialog
-                            onSelect={onSelectMenu}
-                            isWebSearchActive={isWebSearchActive}
-                            selectedAttachment={uploadedFile}
-                        />
-                        <WebSearchToolTip
-                            loading={false}
-                            isWebSearchActive={isWebSearchActive}
-                            handleWebSearchClick={handleWebSearchClick}
-                        />
-                        <PromptEnhance
-                            isWebSearchActive={isWebSearchActive}
-                            text={message}
-                            setText={setMessage}
-                            promptId={selectedContext.prompt_id}
-                            queryId={queryId}
-                            brainId={getDecodedObjectId()}
-                        />
-                        <ToolsConnected 
-                            isWebSearchActive={isWebSearchActive} 
-                            toolStates={toolStates}
-                            onToolStatesChange={handleToolStatesChange}
-                        />
-                        <VoiceChat setText={setMessage} text={message} />
-                        <TextAreaFileInput
-                            fileInputRef={fileInputRef}
-                            handleFileChange={handleFileChange}
-                            multiple
-                        />
-                        <TextAreaSubmitButton
-                            disabled={isSubmitDisabled || isNavigating}
-                            handleSubmit={handleInitialMessage}
-                        />
-                    </div>                    
+                        <div className="flex items-center z-10 px-4 pb-[6px] mt-3">
+                            <ThunderBoltDialog
+                                isWebSearchActive={isWebSearchActive}
+                                dialogOpen={dialogOpen}
+                                uploadedFile={uploadedFile}
+                                setDialogOpen={setDialogOpen}
+                                onSelect={onSelectMenu}
+                                setText={setMessage}
+                                selectedContext={selectedContext}
+                                handlePrompts={handlePrompts}
+                                setHandlePrompts={setHandlePrompts}
+                                getList={searchCustomPrompts}
+                                promptLoader={loading}
+                                setPromptLoader={setLoading}
+                                paginator={paginator}
+                                setPromptList={setCustomPrompts}
+                                promptList={customPrompts}
+                                handleSubmitPrompt={handleInitialMessage}
+                            />
+                            <AttachMentToolTip
+                                fileLoader={fileLoader}
+                                isWebSearchActive={isWebSearchActive}
+                                handleAttachButtonClick={handleAttachButtonClick}
+                            />
+                            <ToolsConnected 
+                                isWebSearchActive={isWebSearchActive} 
+                                toolStates={toolStates}
+                                onToolStatesChange={handleToolStatesChange}
+                            />
+                            <BookmarkDialog
+                                onSelect={onSelectMenu}
+                                isWebSearchActive={isWebSearchActive}
+                                selectedAttachment={uploadedFile}
+                            />
+                            <WebSearchToolTip
+                                loading={false}
+                                isWebSearchActive={isWebSearchActive}
+                                handleWebSearchClick={handleWebSearchClick}
+                            />
+                            <PromptEnhance
+                                isWebSearchActive={isWebSearchActive}
+                                text={message}
+                                setText={setMessage}
+                                promptId={selectedContext.prompt_id}
+                                queryId={queryId}
+                                brainId={getDecodedObjectId()}
+                            />                       
+                            <VoiceChat setText={setMessage} text={message} />
+                            <TextAreaFileInput
+                                fileInputRef={fileInputRef}
+                                handleFileChange={handleFileChange}
+                                multiple
+                            />
+                            <TextAreaSubmitButton
+                                disabled={isSubmitDisabled || isNavigating}
+                                handleSubmit={handleInitialMessage}
+                            />
+                        </div>                    
+                    </div>
                 </div>
                 
                 {!isEmptyObject(selectedBrain) && (
-                <div className="left-0 right-0 bg-white px-2 sm:px-4 py-3 sm:py-4">
-                    <div className="flex items-center justify-center gap-2 max-w-md mx-auto">
-                        <DefaultListOption brain={selectedBrain} />
+                    <div className="left-0 right-0 bg-white px-2 sm:px-4 py-3 sm:py-5">
+                        <div className="flex items-center justify-center gap-2 max-w-md mx-auto">
+                            <DefaultListOption brain={selectedBrain} />
+                        </div>
                     </div>
-                </div>
                 )}
             </div>
         </div>
