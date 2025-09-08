@@ -950,10 +950,10 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                         )}
                     </div>
                 )}
-                    <div className='absolute top-0 left-0 right-0 mx-auto w-[95%] h-[40px]' style={{
+                    {/* <div className='absolute top-0 left-0 right-0 mx-auto w-[95%] h-[40px]' style={{
                         background: 'linear-gradient(90deg, #9D80ED 0%, #CD8AE1 50%, #F74649 100%)',
                         filter: 'blur(99px)'
-                    }}></div>
+                    }}></div> */}
                     <div className="bg-white flex-none mt-auto flex flex-col text-font-16 mx-auto group overflow-hidden rounded-[18px] [&:has(textarea:focus)]:shadow-[0_2px_6px_rgba(0,0,0,.05)] w-full relative border border-b10">
                         <UploadFileInput
                             removeFile={removeSelectedFile}
