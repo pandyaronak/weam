@@ -781,7 +781,7 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                             onClick={() => handlePromptClick(prompt)}
                         >
                             <h3 className='text-font-14 font-bold mb-2'>{prompt.title}</h3>
-                            <p className='text-font-14 text-b6'>
+                            <p className='text-font-14 text-b6 break-words'>
                                 {getTruncatedPromptText(prompt.title, prompt.content, 350)}
                             </p>
                         </div>
