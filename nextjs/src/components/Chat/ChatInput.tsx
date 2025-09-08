@@ -34,8 +34,6 @@ import UploadFileInput, { getResponseModel } from './UploadFileInput';
 import { RootState } from '@/lib/store';
 import { setChatMessageAction, setUploadDataAction } from '@/lib/slices/aimodel/conversation';
 import usePrompt from '@/hooks/prompt/usePrompt';
-import CustomPromptAction from '@/actions/CustomPromptAction';
-import CustomBotAction from '@/actions/CustomTemplateAction';
 import useMediaUpload from '@/hooks/common/useMediaUpload';
 import PromptEnhance from './PromptEnhance';
 import BookmarkDialog from './BookMark';
@@ -54,9 +52,11 @@ import useConversation from '@/hooks/conversation/useConversation';
 import { useThunderBoltPopup } from '@/hooks/conversation/useThunderBoltPopup';
 import ChatInputFileLoader from '@/components/Loader/ChatInputFileLoader';
 import { setSelectedBrain } from '@/lib/slices/brain/brainlist';
+import useMCP from '@/hooks/mcp/useMCP';
+import ToolsConnected from './ToolsConnected';
+import useCustomGpt from '@/hooks/customgpt/useCustomGpt';
 import { LINK } from '@/config/config';
 import defaultCustomGptImage from '../../../public/defaultgpt.jpg';
-import useCustomGpt from '@/hooks/customgpt/useCustomGpt';
 import ThreeDotLoader from '@/components/Loader/ThreeDotLoader';
 import useIntersectionObserver from '@/hooks/common/useIntersectionObserver';
 import useDebounce from '@/hooks/common/useDebounce';
@@ -66,12 +66,11 @@ import ChatIcon from '@/icons/Chat';
 import PromptIcon from '@/icons/Prompt';
 import Customgpt from '@/icons/Customgpt';
 import DocumentIcon from '@/icons/DocumentIcon';
-import { getSelectedBrain, isEmptyObject } from '@/utils/common';
-import useMCP from '@/hooks/mcp/useMCP';
-import ToolsConnected from './ToolsConnected';
+import { getSelectedBrain, isEmptyObject, truncateText } from '@/utils/common';
 import { getDisplayModelName } from '@/utils/helper';
-import { truncateText } from '@/utils/common';
 import AIPagesIcon from '@/icons/AIPagesIcon';
+import Link from 'next/link';
+import CustomPromptAction from '@/actions/CustomPromptAction';
 
 const defaultContext = {
     type: null,
@@ -210,8 +209,11 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
     const { getDecodedObjectId } = useConversationHelper();
     const {
         loading,
+        setPromptList,
+        getTabPromptList,
         paginator,
         setLoading,
+        promptList:prompts,
     } = usePrompt();
     const { fileInputRef, fileLoader, handleFileChange, handlePasteFiles } = useMediaUpload({
         selectedAIModal: selectedAiModal,
@@ -242,57 +244,13 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
         return shuffled.slice(0, count);
     }, []);
 
-    // Function to fetch custom prompts
-    const fetchCustomPrompts = useCallback(async () => {
-        try {
-            const prompts = await CustomPromptAction('', null);
-            setCustomPrompts(prompts);
-            const random = getRandomPrompts(prompts, 4);
-            setRandomPrompts(random);
-        } catch (error) {
-            console.error('Error fetching custom prompts:', error);
-        }
-    }, [getRandomPrompts]);
 
-    // Function to search custom prompts
-    const searchCustomPrompts = useCallback(async (searchValue: string) => {
-        try {
-            const prompts = await CustomPromptAction(searchValue, null);
-            setCustomPrompts(prompts);
-            setHandlePrompts(prompts);
-        } catch (error) {
-            console.error('Error searching custom prompts:', error);
-        }
-    }, []);
-
-    // Function to get random agents
-    const getRandomAgents = useCallback((agents: BrainAgentType[], count: number = 5) => {
-        if (!agents || agents.length === 0) return [];
+    // Function to get random custom prompts
+    const getRandomCustomPrompts = useCallback((prompts: any[], count: number = 4) => {
+        if (!prompts || prompts.length === 0) return [];
         
-        const shuffled = [...agents].sort(() => 0.5 - Math.random());
+        const shuffled = [...prompts].sort(() => 0.5 - Math.random());
         return shuffled.slice(0, count);
-    }, []);
-
-    // Function to fetch custom agents
-    const fetchCustomAgents = useCallback(async () => {
-        try {
-            const agents = await CustomBotAction('');
-            setCustomAgents(agents);
-            const random = getRandomAgents(agents, 5);
-            setRandomAgents(random);
-        } catch (error) {
-            console.error('Error fetching custom agents:', error);
-        }
-    }, [getRandomAgents]);
-
-    // Function to search custom agents
-    const searchCustomAgents = useCallback(async (searchValue: string) => {
-        try {
-            const agents = await CustomBotAction(searchValue);
-            setCustomAgents(agents);
-        } catch (error) {
-            console.error('Error searching custom agents:', error);
-        }
     }, []);
 
     // Function to truncate text with title and content totaling 250 characters
@@ -307,13 +265,14 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
         return content.slice(0, availableLength) + '...';
     }, []);
 
-    // Fetch custom prompts and agents on component mount
+    // Update random prompts when prompts change
     useEffect(() => {
-        fetchCustomPrompts();
-        fetchCustomAgents();
-    }, [fetchCustomPrompts, fetchCustomAgents]);
+        if (prompts && prompts.length > 0) {
+            const random = getRandomPrompts(prompts, 4);
+            setRandomPrompts(random);
+        }
+    }, [prompts, getRandomPrompts]);
 
-    // Update random agents when customgptList changes - moved after customgptList declaration
 
     // Handle prompt selection
     const handlePromptClick = (prompt: BrainPromptType) => {
@@ -327,20 +286,17 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
         setMessage(promptContent);
     };
 
+    // Handle custom prompt selection
+    const handleCustomPromptClick = (prompt: any) => {
+        onSelectMenu(GPTTypes.Prompts, prompt);
+        setMessage(prompt.content);
+    };
+
     // Handle See More navigation
     const handleSeeMoreClick = () => {
         router.push('/custom-templates?tab=prompttemplate');
     };
 
-    // Handle agent selection
-    const handleAgentClick = (agent: BrainAgentType) => {
-        onSelectMenu(GPTTypes.CustomGPT, agent);
-    };
-
-    // Handle Agent See More navigation
-    const handleAgentSeeMoreClick = () => {
-        router.push('/custom-templates?tab=bottemplate');
-    };
 
     const DefaultListOption = React.memo(({ brain } : { brain: BrainListType }) => {
         const router = useRouter();
@@ -382,7 +338,7 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                 href: routes.docs,
             },
             {
-                icon: <DocumentIcon width={20} height={20} className="fill-b6" />,
+                icon: <DocumentIcon width={18} height={18} className="fill-b6 w-4 h-auto" />,
                 text: 'Pages',
                 id: 5,
                 href: routes.pages,
@@ -394,13 +350,13 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                 {listOptions.map((option) => (
                     <button
                         key={option.id}
-                        className="flex text-font-14 z-10 flex-row items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1 sm:py-2 rounded-md border border-gray-300 bg-white transition-all ease-in-out duration-500 hover:shadow-lg"
+                        className="border rounded-md px-4 py-2 md:py-3 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer transition-colors"
                         onClick={() => handleNavigation(option.href)}
                     >
                         <div className="flex items-center justify-center">
                             {option.icon}
                         </div>
-                        <span className="text-b3 transition-all ease-in-out duration-500 text-xs font-medium hidden sm:block">{option.text}</span>
+                        <span className="text-b3 transition-all ease-in-out duration-500 text-font-12 md:text-font-14 font-medium sm:block">{option.text}</span>
                     </button>
                 ))}
             </>
@@ -607,9 +563,9 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
     }, [selectedAiModal,currentUser]);
 
     useEffect(() => {
-        if(customPrompts?.length > 0){
+        if(prompts?.length > 0){
             if(message){
-                const updateIsActive = customPrompts.map((currPrompt) => {
+                const updateIsActive = prompts.map((currPrompt) => {
                     if(currPrompt.content){
                         const summaries = currPrompt?.summaries 
                             ? Object.values(currPrompt.summaries)
@@ -626,12 +582,12 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
 
                 setHandlePrompts(updateIsActive);
             }else{
-                setHandlePrompts(customPrompts);
+                setHandlePrompts(prompts);
             }
         }else{
-            setHandlePrompts(customPrompts)
+            setHandlePrompts(prompts)
         }
-    }, [customPrompts, message]);
+    }, [prompts, message]);
 
     // Auto-adjust textarea height based on content
     useEffect(() => {
@@ -714,28 +670,55 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
     }, [showAgentList, showPromptList]);
 
 
+    const {
+        customgptList,
+        loading: customgptLoading,
+        getTabAgentList,
+        paginator: agentPaginator,
+        setCustomGptList
+    } = useCustomGpt();
 
-    // Note: Random agents are now updated in fetchCustomAgents function
+
+    // Fetch custom prompts from prompt library on component mount
+    useEffect(() => {
+        const fetchCustomPrompts = async () => {
+            try {
+                const response = await CustomPromptAction('', '');
+                if (response && response.length > 0) {
+                    const randomPrompts = getRandomCustomPrompts(response, 4);
+                    setCustomPrompts(randomPrompts);
+                }
+            } catch (error) {
+                console.error('Error fetching custom prompts:', error);
+            }
+        };
+        
+        fetchCustomPrompts();
+    }, [getRandomCustomPrompts]);
 
     const [debouncedSearchValue] = useDebounce(searchValue, 500);
 
     useEffect(() => {
         if (debouncedSearchValue) {
-            // Search custom agents instead of using getTabAgentList
-            searchCustomAgents(debouncedSearchValue);
-            // Search custom prompts instead of using getTabPromptList
-            searchCustomPrompts(debouncedSearchValue);
+            setCustomGptList([]);
+            getTabAgentList(debouncedSearchValue);
+            setPromptList([]);
+            getTabPromptList(debouncedSearchValue);
         } else {
-            // Reset to all custom agents and prompts
-            fetchCustomAgents();
-            fetchCustomPrompts();
+            setCustomGptList([]);
+            getTabAgentList('');
+            setPromptList([]);
+            getTabPromptList('');
         }
-    }, [debouncedSearchValue, searchCustomPrompts, fetchCustomPrompts, searchCustomAgents, fetchCustomAgents]);
+    }, [debouncedSearchValue]);
 
     const gptListRef = useIntersectionObserver(() => {
-        // Note: Custom agents don't use pagination, so this observer is not needed
-        // Keeping for compatibility but it won't trigger any action
-    }, []);
+        if (agentPaginator.hasNextPage && !customgptLoading) {
+            getTabAgentList(searchValue, {
+                offset: agentPaginator.offset + agentPaginator.perPage, limit: agentPaginator.perPage 
+            });
+        }
+    }, [agentPaginator?.hasNextPage, !customgptLoading]);
 
     const handleAgentSelection = (gpt) => {
         onSelectMenu(GPTTypes.CustomGPT, gpt);
@@ -759,34 +742,33 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
     };
 
     return (
-        <div className="w-full h-full flex justify-center overflow-y-auto">
-            <div className={`w-full flex flex-col mx-auto px-5 md:max-w-[32rem] lg:max-w-[980px] xl:max-w-[1100px] ${isNavigating ? 'opacity-50' : ''}`}>
-                <div className='flex justify-between items-center'>
+        <div className="w-full h-full overflow-y-auto flex justify-center">
+            <div className={`w-full flex flex-col max-lg:flex-col-reverse mx-auto px-5 md:max-w-[90%] lg:max-w-[980px] xl:max-w-[1100px] ${isNavigating ? 'opacity-50' : ''}`}>
+                <div className='flex items-center justify-between'>
                     <h2 className='hidden lg:block text-font-14 font-bold mt-5 mb-3'>Your Daily AI Smart Suggestions</h2>
                     <p className="text-right hidden lg:block">
                         <button 
                             onClick={handleSeeMoreClick}
-                            className='text-font-14 text-blue2 underline hover:text-blue font-bold transition-colors'
+                            className='text-font-14 text-blue2 underline hover:text-blue transition-colors'
                         >
                             See More
                         </button>
                     </p>
                 </div>
-
                 <div className='hidden lg:grid md:grid-cols-4 gap-4 mb-10'>
-                    {randomPrompts.map((prompt, index) => (
+                    {customPrompts.map((prompt, index) => (
                         <div 
                             key={prompt._id || index}
                             className='border rounded-md p-5 bg-white hover:bg-b12 cursor-pointer transition-colors'
-                            onClick={() => handlePromptClick(prompt)}
+                            onClick={() => handleCustomPromptClick(prompt)}
                         >
                             <h3 className='text-font-14 font-bold mb-2'>{prompt.title}</h3>
-                            <p className='text-font-14 text-b6 break-words'>
-                                {getTruncatedPromptText(prompt.title, prompt.content, 350)}
+                            <p className='text-font-14 text-b6'>
+                                {truncateText(prompt.content, 350)}
                             </p>
                         </div>
                     ))}
-                    {randomPrompts.length === 0 && (
+                    {customPrompts.length === 0 && (
                         <React.Fragment>
                             <div className='border rounded-md p-5 bg-white hover:bg-b12 cursor-pointer'>
                                 <h3 className='text-font-14 font-bold text-b5'>Loading...</h3>
@@ -808,73 +790,26 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                     )}
                 </div>
                 
-                <div className='hidden lg:grid grid-cols-5 gap-4 mb-5'>
-                    {randomAgents.map((agent, index) => (
-                        <div 
-                            key={agent._id || index}
-                            className='border rounded-md px-4 py-2 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer transition-colors'
-                            onClick={() => handleAgentClick(agent)}
-                        >
-                            <Image
-                                src={
-                                    agent?.coverImg?.uri
-                                        ? `${LINK.AWS_S3_URL}${agent.coverImg.uri}`
-                                        : agent?.charimg
-                                        ? agent.charimg
-                                        : defaultCustomGptImage.src
-                                }
-                                height={24}
-                                width={24}
-                                className="w-6 h-6 object-contain rounded-custom"
-                                alt={agent?.coverImg?.name || agent?.charimg ? 'Agent Image' : 'Default Image'}
-                            />
-                            <span className="text-b2 font-medium text-xs truncate">{agent.title}</span>
+                
+                {!isEmptyObject(selectedBrain) && (
+                    <div className="left-0 right-0 py-3 sm:py-4">
+                        <div className="grid md:grid-cols-5 grid-cols-3 md:gap-4 gap-2 md:mb-5 mb-2">
+                            <DefaultListOption brain={selectedBrain} />
                         </div>
-                    ))}
-                    {randomAgents.length === 0 && (
-                        <React.Fragment>
-                            <div className='border rounded-md px-4 py-2 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer'>
-                                <div className="w-6 h-6 bg-gray-200 rounded animate-pulse"></div>
-                                <span className="text-gray-400 text-xs">Loading...</span>
-                            </div>
-                            <div className='border rounded-md px-4 py-2 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer'>
-                                <div className="w-6 h-6 bg-gray-200 rounded animate-pulse"></div>
-                                <span className="text-gray-400 text-xs">Loading...</span>
-                            </div>
-                            <div className='border rounded-md px-4 py-2 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer'>
-                                <div className="w-6 h-6 bg-gray-200 rounded animate-pulse"></div>
-                                <span className="text-gray-400 text-xs">Loading...</span>
-                            </div>
-                            <div className='border rounded-md px-4 py-2 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer'>
-                                <div className="w-6 h-6 bg-gray-200 rounded animate-pulse"></div>
-                                <span className="text-gray-400 text-xs">Loading...</span>
-                            </div>
-                            <div className='border rounded-md px-4 py-2 text-font-14 justify-center flex items-center gap-x-2 bg-white hover:bg-b12 cursor-pointer'>
-                                <div className="w-6 h-6 bg-gray-200 rounded animate-pulse"></div>
-                                <span className="text-gray-400 text-xs">Loading...</span>
-                            </div>
-                        </React.Fragment>
-                    )}
-                </div>
-                <p className='text-font-14 mb-5 hidden lg:block'>Agents work best when you assign them a clear role. 
-                    <button 
-                        onClick={handleAgentSeeMoreClick}
-                        className='text-blue2 hover:text-blue underline transition-colors ml-1'
-                    >
-                        See More
-                    </button>
-                </p>
-                
+                    </div>
+                )}
+
+                <div className='relative mt-auto md:mb-10 mb-2'>
                 {(showAgentList || showPromptList) && (
-                    <div ref={agentPromptDropdownRef}>
+                    <div className='absolute bottom-full w-full z-10' ref={agentPromptDropdownRef}>
                         {showAgentList && (
-                            <div className='w-full p-4 border rounded-md mb-1'>
+                            <div className='w-full p-4 border rounded-lg mb-1 bg-white'>
                                 <div className='normal-agent'>
                                     <div className='flex mb-1'>
                                         <div className="relative w-full">
                                             <input
                                                 type="text"
-                                                className="text-font-14 pl-[36px] py-2 w-full focus:outline-none focus:border-none"
+                                                className="text-font-14 pl-[36px] py-2 w-full focus:outline-none focus:border-none bg-transparent"
                                                 id="searchBots"
                                                 placeholder="Search Agents"
                                                 onChange={handleInputChanges}
@@ -887,8 +822,8 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                                     </div>
                                     <div className="pr-1 h-full overflow-y-auto max-md:overflow-x-hidden w-full max-h-[250px]">
                                         {
-                                            customAgents.length > 0 && (
-                                            customAgents.map((gpt: BrainAgentType, index: number, gptArray: BrainAgentType[]) => {
+                                            customgptList.length > 0 && (
+                                            customgptList.map((gpt: BrainAgentType, index: number, gptArray: BrainAgentType[]) => {
                                                 const isSelected = uploadedFile?.some((file: UploadedFileType) => file?._id === gpt._id);
                                                 
                                                 return (
@@ -897,7 +832,7 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                                                         className={`cursor-pointer border-b10 py-1.5 px-2.5 transition-all ease-in-out rounded-md hover:bg-b12 ${    
                                                             isSelected
                                                                 ? 'bg-b12 border-b10'
-                                                                : 'bg-white border-b10'
+                                                                : ' border-b10'
                                                         } flex-wrap`}
                                                         onClick={() => handleAgentSelection(gpt)}
                                                         ref={gptArray.length - 1 === index ? gptListRef : null}
@@ -936,7 +871,7 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                                             )
                                         }
                                         {
-                                            loading && (
+                                            customgptLoading && (
                                                 <ThreeDotLoader className="justify-start ml-8 mt-3" />
                                             )
                                         }
@@ -945,13 +880,13 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                             </div>
                         )}
                         {showPromptList && (
-                            <div className='w-full p-4 border rounded-md mb-1'>
+                            <div className='w-full p-4 border rounded-lg mb-1 bg-white'>
                                 <div className='prompt-list'>
                                     <div className='flex mb-1'>
                                         <div className="relative w-full">
                                             <input
                                                 type="text"
-                                                className="text-font-14 pl-[36px] py-2 w-full focus:outline-none focus:border-none"
+                                                className="text-font-14 pl-[36px] py-2 w-full focus:outline-none focus:border-none bg-transparent"
                                                 id="searchPrompts"
                                                 placeholder="Search Prompts"
                                                 onChange={handleInputChanges}
@@ -970,8 +905,8 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                                                     key={currPrompt._id}
                                                     className={`cursor-pointer border-b10 py-1.5 px-2.5 transition-all ease-in-out rounded-md hover:bg-b12 ${
                                                         currPrompt.isActive
-                                                            ? 'bg-b12 border-b10'
-                                                            : 'bg-white border-b10'
+                                                            ? ' border-b10'
+                                                            : ' border-b10'
                                                     }`}
                                                     onClick={() => {
                                                         const summaries = currPrompt?.summaries
@@ -1015,7 +950,6 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                         )}
                     </div>
                 )}
-                <div className='relative mt-auto'>
                     <div className='absolute top-0 left-0 right-0 mx-auto w-[95%] h-[40px]' style={{
                         background: 'linear-gradient(90deg, #9D80ED 0%, #CD8AE1 50%, #F74649 100%)',
                         filter: 'blur(99px)'
@@ -1046,12 +980,12 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                                 selectedContext={selectedContext}
                                 handlePrompts={handlePrompts}
                                 setHandlePrompts={setHandlePrompts}
-                                getList={searchCustomPrompts}
+                                getList={getTabPromptList}
                                 promptLoader={loading}
                                 setPromptLoader={setLoading}
                                 paginator={paginator}
-                                setPromptList={setCustomPrompts}
-                                promptList={customPrompts}
+                                setPromptList={setPromptList}
+                                promptList={prompts}
                                 handleSubmitPrompt={handleInitialMessage}
                             />
                             <AttachMentToolTip
@@ -1094,15 +1028,10 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                             />
                         </div>                    
                     </div>
+                    <p className='text-font-12 mt-1 text-b7 text-center'>Weam can make mistakes. Consider checking the following information.</p>
                 </div>
                 
-                {!isEmptyObject(selectedBrain) && (
-                    <div className="left-0 right-0 bg-white px-2 sm:px-4 py-3 sm:py-5">
-                        <div className="flex items-center justify-center gap-2 max-w-md mx-auto">
-                            <DefaultListOption brain={selectedBrain} />
-                        </div>
-                    </div>
-                )}
+                
             </div>
         </div>
         </>

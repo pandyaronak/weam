@@ -139,7 +139,7 @@ const ToolsConnected = ({ isWebSearchActive, toolStates, onToolStatesChange }: T
                         <Tooltip>
                             <TooltipTrigger>
                                 <div
-                                    className={`chat-btn cursor-pointer bg-white transition ease-in-out duration-200 hover:bg-b11 rounded-md w-auto h-8 flex items-center px-[5px] ${
+                                    className={`chat-btn cursor-pointer transition ease-in-out duration-200 hover:bg-b11 rounded-md w-auto h-8 flex items-center px-[5px] ${
                                         isWebSearchActive
                                             ? 'opacity-50 pointer-events-none'
                                             : ''
