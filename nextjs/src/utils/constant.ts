@@ -149,6 +149,14 @@ export const MODULE_ACTIONS = {
     ADD_CREDIT: 'addCredit',    
     UPDATE_MCP_DATA: 'updateMcpData',
     GET_AI_ADOPTION: 'getAiAdoption',
+    SUPER_SOLUTION: 'super-solution',
+    ADD_MEMBERS_TO_SOLUTION_APP: 'addMembersToSolutionApp',
+    ADD_TEAMS_TO_SOLUTION_APP: 'addTeamsToSolutionApp',
+    REMOVE_MEMBERS_FROM_SOLUTION_APP: 'removeMembersFromSolutionApp',
+    GET_MEMBERS_TO_SOLUTION_APP: 'getMembersToSolutionApp',
+    GET_TEAMS_TO_SOLUTION_APP: 'getTeamsToSolutionApp',
+    REMOVE_TEAMS_FROM_SOLUTION_APP: 'removeTeamsFromSolutionApp',
+    GET_SOLUTION_APP_BY_USER_ID: 'getSolutionAppByUserId',
     UPDATE_MESSAGE: 'updateMessage',
     CREATE_FILE_RECORD: 'createFileRecord',
     PAGE_CREATE: 'createPage',
@@ -1394,4 +1402,3 @@ export const WEB_RESOURCES_DATA = 'web_resources_data';
 
 // MCP Tool States Cookie Persistence
 export const MCP_TOOLS_COOKIE_NAME = 'mcp_tool_cookie';
-export const ONBOARDING_DIALOG_SEEN = 'onboarding_dialog_seen';
