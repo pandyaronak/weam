@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { Ollama } = require('ollama');
-const { Company, User } = require('../models');
+const Company = require('../models/company');
+const User = require('../models/user');
 const ollamaAnalytics = require('./ollamaAnalytics');
 
 class OllamaService {
@@ -10,19 +11,30 @@ class OllamaService {
         this.ollamaClient = null;
     }
 
-    getOllamaClient(baseUrl) {
+    getOllamaClient(baseUrl, apiKey) {
         const url = baseUrl || this.defaultBaseUrl;
-        if (!this.ollamaClient || this.ollamaClient.host !== url) {
-            this.ollamaClient = new Ollama({ host: url });
+        const clientKey = `${url}-${apiKey || 'no-key'}`;
+        
+        if (!this.ollamaClient || this.ollamaClient._key !== clientKey) {
+            const config = { host: url };
+            
+            if (apiKey) {
+                config.headers = {
+                    'Authorization': `Bearer ${apiKey}`
+                };
+            }
+            
+            this.ollamaClient = new Ollama(config);
+            this.ollamaClient._key = clientKey;
         }
         return this.ollamaClient;
     }
 
-    async chat({ messages, model, baseUrl, stream, userId, companyId, options = {} }) {
+    async chat({ messages, model, baseUrl, stream, userId, companyId, options = {}, apiKey }) {
         const ollamaUrl = baseUrl || this.defaultBaseUrl;
         
         try {
-            const ollamaClient = this.getOllamaClient(ollamaUrl);
+            const ollamaClient = this.getOllamaClient(ollamaUrl, apiKey);
             
             const ollamaMessages = messages.map(msg => ({
                 role: msg.role,
@@ -92,11 +104,11 @@ class OllamaService {
         }
     }
 
-    async generate({ prompt, model, baseUrl, stream, userId, companyId, options = {} }) {
+    async generate({ prompt, model, baseUrl, stream, userId, companyId, options = {}, apiKey }) {
         const ollamaUrl = baseUrl || this.defaultBaseUrl;
         
         try {
-            const ollamaClient = this.getOllamaClient(ollamaUrl);
+            const ollamaClient = this.getOllamaClient(ollamaUrl, apiKey);
 
             const requestOptions = {
                 model,
@@ -144,11 +156,11 @@ class OllamaService {
         }
     }
 
-    async listModels(baseUrl, companyId) {
+    async listModels(baseUrl, companyId, apiKey) {
         const ollamaUrl = baseUrl || this.defaultBaseUrl;
         
         try {
-            const ollamaClient = this.getOllamaClient(ollamaUrl);
+            const ollamaClient = this.getOllamaClient(ollamaUrl, apiKey);
             const response = await ollamaClient.list();
 
             let modelList = response.models || [];
@@ -246,11 +258,11 @@ class OllamaService {
         }
     }
 
-    async testConnectivity(baseUrl) {
+    async testConnectivity(baseUrl, apiKey) {
         const ollamaUrl = baseUrl || this.defaultBaseUrl;
         
         try {
-            const ollamaClient = this.getOllamaClient(ollamaUrl);
+            const ollamaClient = this.getOllamaClient(ollamaUrl, apiKey);
             await ollamaClient.list();
             return true;
         } catch (error) {

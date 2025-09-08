@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { authentication } = require('../middleware/authentication');
 const { streamingMiddleware } = require('../middleware/ollamaStream');
 const { 
     ollamaValidation, 
@@ -12,7 +12,7 @@ const ollamaController = require('../controller/ollamaController');
 
 router.get('/health', ollamaController.healthCheck);
 
-router.use(auth);
+router.use(authentication);
 
 router.post('/chat', 
     streamingMiddleware,
@@ -67,5 +67,9 @@ router.get('/analytics/model/:modelName',
     ollamaController.getModelPerformance
 );
 router.get('/analytics/overview', ollamaController.getCompanyOverview);
+
+// New endpoints for API key and settings management
+router.post('/test-connection-with-key', ollamaController.testConnectionWithApiKey);
+router.post('/save-settings', ollamaController.saveOllamaSettings);
 
 module.exports = router;

@@ -1,11 +1,10 @@
 const ollamaService = require('../services/ollamaService');
 const ollamaAnalytics = require('../services/ollamaAnalytics');
-const { RESPONSE_STATUS } = require('../utils/constant');
 
 class OllamaController {
     async chat(req, res) {
         try {
-            const { messages, model, baseUrl, stream = false, options = {} } = req.body;
+            const { messages, model, baseUrl, stream = false, options = {}, apiKey } = req.body;
             const userId = req.user.id;
             const companyId = req.user.company_id;
 
@@ -25,7 +24,7 @@ class OllamaController {
             }
 
             try {
-                await ollamaService.testConnectivity(baseUrl);
+                await ollamaService.testConnectivity(baseUrl, apiKey);
             } catch (error) {
                 return res.status(503).json({
                     code: 'OLLAMA_UNAVAILABLE',
@@ -41,7 +40,8 @@ class OllamaController {
                 stream,
                 userId,
                 companyId,
-                options
+                options,
+                apiKey
             });
 
             if (stream && result.success) {
@@ -72,7 +72,7 @@ class OllamaController {
 
     async generate(req, res) {
         try {
-            const { prompt, model, baseUrl, stream = false, options = {} } = req.body;
+            const { prompt, model, baseUrl, stream = false, options = {}, apiKey } = req.body;
             const userId = req.user.id;
             const companyId = req.user.company_id;
 
@@ -98,7 +98,8 @@ class OllamaController {
                 stream,
                 userId,
                 companyId,
-                options
+                options,
+                apiKey
             });
 
             if (stream && result.success) {
@@ -127,12 +128,12 @@ class OllamaController {
 
     async listModels(req, res) {
         try {
-            const { baseUrl } = req.query;
+            const { baseUrl, apiKey } = req.query;
             const userId = req.user.id;
             const companyId = req.user.company_id;
 
             try {
-                await ollamaService.testConnectivity(baseUrl);
+                await ollamaService.testConnectivity(baseUrl, apiKey);
             } catch (error) {
                 return res.status(503).json({
                     code: 'OLLAMA_UNAVAILABLE',
@@ -141,7 +142,7 @@ class OllamaController {
                 });
             }
 
-            const models = await ollamaService.listModels(baseUrl, companyId);
+            const models = await ollamaService.listModels(baseUrl, companyId, apiKey);
             
             res.json({
                 success: true,
@@ -164,7 +165,6 @@ class OllamaController {
             const userId = req.user.id;
             const companyId = req.user.company_id;
 
-            // Check if user has admin permissions
             const isAdmin = await ollamaService.checkAdminPermission(userId, companyId);
             if (!isAdmin) {
                 return res.status(403).json({
@@ -331,12 +331,12 @@ class OllamaController {
 
     async testConnection(req, res) {
         try {
-            const { baseUrl } = req.query;
+            const { baseUrl, apiKey } = req.query;
             const testUrl = baseUrl || 'http://localhost:11434';
             
-            await ollamaService.testConnectivity(testUrl);
+            await ollamaService.testConnectivity(testUrl, apiKey);
             
-            const models = await ollamaService.listModels(testUrl, null);
+            const models = await ollamaService.listModels(testUrl, null, apiKey);
             
             res.json({
                 success: true,
@@ -466,14 +466,14 @@ class OllamaController {
 
     async healthCheck(req, res) {
         try {
-            const { baseUrl } = req.query;
+            const { baseUrl, apiKey } = req.query;
             const testUrl = baseUrl || 'http://localhost:11434';
             
             const startTime = Date.now();
-            await ollamaService.testConnectivity(testUrl);
+            await ollamaService.testConnectivity(testUrl, apiKey);
             const responseTime = Date.now() - startTime;
             
-            const models = await ollamaService.listModels(testUrl, null);
+            const models = await ollamaService.listModels(testUrl, null, apiKey);
             
             res.json({
                 success: true,
@@ -498,6 +498,72 @@ class OllamaController {
                     'Verify the URL is correct',
                     'Install at least one model: ollama pull llama3.1:8b'
                 ]
+            });
+        }
+    }
+
+    async testConnectionWithApiKey(req, res) {
+        try {
+            const { baseUrl, apiKey } = req.body;
+            const testUrl = baseUrl || 'http://localhost:11434';
+            
+            await ollamaService.testConnectivity(testUrl, apiKey);
+            const models = await ollamaService.listModels(testUrl, null, apiKey);
+            
+            res.json({
+                success: true,
+                message: 'Connection successful',
+                url: testUrl,
+                modelCount: models.length,
+                availableModels: models.map(m => m.name)
+            });
+        } catch (error) {
+            logger.error('Ollama connection test with API key error:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Connection failed',
+                error: error.message,
+                url: req.body.baseUrl || 'http://localhost:11434'
+            });
+        }
+    }
+
+    async saveOllamaSettings(req, res) {
+        try {
+            const { baseUrl, apiKey, provider } = req.body;
+            const userId = req.user.id;
+            const companyId = req.user.company_id;
+
+            try {
+                await ollamaService.testConnectivity(baseUrl, apiKey);
+            } catch (error) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Failed to connect to Ollama instance',
+                    error: error.message
+                });
+            }
+
+            const settings = {
+                defaultBaseUrl: baseUrl,
+                apiKey: apiKey,
+                enabled: true,
+                updatedAt: new Date()
+            };
+
+            const updatedSettings = await ollamaService.updateCompanyOllamaSettings(companyId, settings);
+            
+            res.json({
+                success: true,
+                message: 'Ollama settings saved successfully',
+                settings: updatedSettings
+            });
+        } catch (error) {
+            logger.error('Save Ollama settings error:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to save Ollama settings',
+                error: error.message
             });
         }
     }

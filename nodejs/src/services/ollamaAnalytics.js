@@ -1,4 +1,5 @@
-const { Company, User } = require('../models');
+const Company = require('../models/company');
+const User = require('../models/user');
 
 class OllamaAnalyticsService {
     constructor() {
