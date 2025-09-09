@@ -1,27 +1,86 @@
 const { handleError } = require('../utils/helper');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const SOLUTION_CONFIGS = require('../config/solutionconfig');
 
-function runBash(command, options = {}) {
-    return new Promise((resolve, reject) => {
-        const child = spawn('sh', ['-c', command], options);
-        child.stdout.on('data', (data) => console.log(String(data).trim()));
-        child.stderr.on('data', (data) => console.error(String(data).trim()));
-        child.on('close', (code) => {
-            return code === 0 ? resolve(code) : reject(new Error(`Command failed: ${command}`));
-        });
-    });
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Detects Docker Compose and returns appropriate command
+ * @returns {Promise<{command: string, needsInstall: boolean}>}
+ */
+async function detectDockerCompose() {
+    try {
+        // First check for docker-compose command (V1 or installed V2)
+        try {
+            await runBashWithProgress('docker-compose --version', null, 'Checking for docker-compose');
+            console.log('✅ docker-compose command found');
+            return {
+                command: 'docker-compose',
+                needsInstall: false
+            };
+        } catch (error) {
+            console.log('❌ docker-compose not found, will install');
+            return {
+                command: 'docker-compose',
+                needsInstall: true
+            };
+        }
+    } catch (error) {
+        console.error('Error detecting Docker Compose:', error);
+        return {
+            command: 'docker-compose',
+            needsInstall: true
+        };
+    }
 }
 
+/**
+ * Installs Docker Compose V2 if needed
+ * @param {object} res - Express response object
+ * @returns {Promise<void>}
+ */
+async function installDockerComposeV2(res) {
+    console.log('📦 Installing Docker Compose V2...');
+    
+    try {
+        // First check if docker-compose is already available
+        await runBashWithProgress('which docker-compose', res, 'Checking for existing Docker Compose');
+        console.log('✅ Docker Compose already available');
+        return;
+    } catch (error) {
+        console.log('Docker Compose not found, proceeding with installation...');
+    }
+    
+    const installCommand = `wget -O /usr/local/bin/docker-compose "https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-$(uname -s)-$(uname -m)" && chmod +x /usr/local/bin/docker-compose`;
+    
+    try {
+        await runBashWithProgress(installCommand, res, 'Docker Compose V2 installation completed');
+        console.log('✅ Docker Compose V2 installed successfully');
+        
+        // Verify installation
+        await runBashWithProgress('docker-compose --version', res, 'Verifying Docker Compose installation');
+    } catch (error) {
+        console.error('❌ Failed to install Docker Compose V2:', error);
+        // Don't throw error, continue with fallback approach
+        console.log('⚠️ Continuing with fallback approach...');
+    }
+}
+
+/**
+ * Executes bash commands with console output
+ * @param {string} command - The bash command to execute
+ * @param {object} res - Express response object (kept for compatibility)
+ * @param {string} progressMessage - Optional progress message to log
+ * @returns {Promise} - Resolves when command completes successfully
+ */
 function runBashWithProgress(command, res, progressMessage) {
     return new Promise((resolve, reject) => {
-        // Send progress update
-        if (res && progressMessage) {
-            res.write(`data: ${JSON.stringify({ 
-                type: 'progress', 
-                message: progressMessage,
-                timestamp: new Date().toISOString()
-            })}\n\n`);
+        // Log progress message
+        if (progressMessage) {
+            console.log(progressMessage);
         }
 
         const child = spawn('sh', ['-c', command], {});
@@ -29,29 +88,11 @@ function runBashWithProgress(command, res, progressMessage) {
         child.stdout.on('data', (data) => {
             const output = String(data).trim();
             console.log(output);
-            
-            // Send real-time output to client
-            if (res) {
-                res.write(`data: ${JSON.stringify({ 
-                    type: 'output', 
-                    message: output,
-                    timestamp: new Date().toISOString()
-                })}\n\n`);
-            }
         });
         
         child.stderr.on('data', (data) => {
             const error = String(data).trim();
             console.error(error);
-            
-            // Send error output to client
-            if (res) {
-                res.write(`data: ${JSON.stringify({ 
-                    type: 'error_output', 
-                    message: error,
-                    timestamp: new Date().toISOString()
-                })}\n\n`);
-            }
         });
         
         child.on('close', (code) => {
@@ -64,7 +105,42 @@ function runBashWithProgress(command, res, progressMessage) {
     });
 }
 
-// Function to merge environment variables and create build args
+/**
+ * Executes bash commands and returns output
+ * @param {string} command - The bash command to execute
+ * @returns {Promise<string>} - Resolves with command output
+ */
+function runBashWithOutput(command) {
+    return new Promise((resolve, reject) => {
+        const child = spawn('sh', ['-c', command], {});
+        let output = '';
+        let errorOutput = '';
+        
+        child.stdout.on('data', (data) => {
+            output += String(data);
+        });
+        
+        child.stderr.on('data', (data) => {
+            errorOutput += String(data);
+        });
+        
+        child.on('close', (code) => {
+            if (code === 0) {
+                resolve(output.trim());
+            } else {
+                reject(new Error(`Command failed: ${command}. Error: ${errorOutput}`));
+            }
+        });
+    });
+}
+
+/**
+ * Merges environment variables from root and local .env files
+ * Creates Docker build arguments from merged variables
+ * @param {string} rootEnvPath - Path to root .env file
+ * @param {string} localEnvPath - Path to local .env file
+ * @returns {string} - Space-separated Docker build arguments
+ */
 function mergeEnvAndCreateBuildArgs(rootEnvPath, localEnvPath) {
     try {
         // Read root .env file
@@ -116,199 +192,454 @@ function mergeEnvAndCreateBuildArgs(rootEnvPath, localEnvPath) {
     }
 }
 
-// Solution configurations
-const SOLUTION_CONFIGS = {
-    'ai-doc-editor': {
-        repoUrl: 'https://github.com/devweam-ai/ai-doc-editor.git',
-        repoName: 'ai-doc-editor',
-        imageName: 'ai-doc-editor-img',
-        containerName: 'ai-doc-editor-container',
-        port: '3002',
-        branchName: 'development',
-        installType: 'docker', // docker or docker-compose
-        envFile: 'env.example'
-    },
-    'seo-content-gen': {
-        repoUrl: 'https://github.com/devweam-ai/seo-content-gen.git',
-        repoName: 'seo-content-gen',
-        imageName: 'seo-content-gen-img',
-        containerName: 'seo-content-gen-container',
-        port: '3003',
-        branchName: 'opensource-deployment',
-        installType: 'docker-compose', // docker or docker-compose
-        envFile: null, // No env file needed for docker-compose
-        // Additional ports that might be used by docker-compose
-        additionalPorts: ['9001', '9002', '9003']
-    }
-};
-
-// Removed install() function - using only installWithProgress() to avoid double execution
-
-const installWithProgress = async (req, res) => {
+/**
+ * Merges environment variables from root and local .env files
+ * Writes merged variables to a .env file
+ * @param {string} rootEnvPath - Path to root .env file
+ * @param {string} localEnvPath - Path to local .env file
+ * @param {string} outputPath - Path where to write the merged .env file
+ * @returns {object} - Merged environment variables object
+ */
+function mergeEnvAndWriteToFile(rootEnvPath, localEnvPath, outputPath) {
     try {
-        // Get solution type from request body or default to ai-doc-editor
-        const solutionType = req.body?.solutionType || 'ai-doc-editor';
-        const config = SOLUTION_CONFIGS[solutionType];
-        
-        if (!config) {
-            throw new Error(`Unknown solution type: ${solutionType}`);
+        // Read root .env file
+        let rootEnvVars = {};
+        if (fs.existsSync(rootEnvPath)) {
+            const rootContent = fs.readFileSync(rootEnvPath, 'utf8');
+            rootContent.split('\n').forEach(line => {
+                const trimmedLine = line.trim();
+                if (trimmedLine && !trimmedLine.startsWith('#') && trimmedLine.includes('=')) {
+                    const [key, ...valueParts] = trimmedLine.split('=');
+                    rootEnvVars[key.trim()] = valueParts.join('=').trim();
+                }
+            });
         }
 
-        const repoPath = `/workspace/${config.repoName}`;
-        const networkName = 'weamai_app-network';
-        const totalSteps = config.installType === 'docker' ? 5 : 5;
-
-        // Step 1: Clean up existing repository
-        res.write(`data: ${JSON.stringify({ 
-            type: 'progress', 
-            message: '🧹 Cleaning up existing repository...',
-            step: 1,
-            totalSteps: totalSteps
-        })}\n\n`);
-        
-        await runBashWithProgress(`rm -rf ${repoPath}`, res, 'Repository cleanup completed');
-
-        // Step 2: Clone repository
-        res.write(`data: ${JSON.stringify({ 
-            type: 'progress', 
-            message: '📥 Cloning repository from GitHub...',
-            step: 2,
-            totalSteps: totalSteps
-        })}\n\n`);
-        
-        await runBashWithProgress(`git clone -b ${config.branchName} ${config.repoUrl} ${repoPath}`, res, 'Repository cloned successfully');
-
-        if (config.installType === 'docker') {
-            // Step 3: Setup environment (Docker only)
-            res.write(`data: ${JSON.stringify({ 
-                type: 'progress', 
-                message: '⚙️ Setting up environment configuration...',
-                step: 3,
-                totalSteps: totalSteps
-            })}\n\n`);
-            
-            await runBashWithProgress(`cp ${repoPath}/${config.envFile} ${repoPath}/.env`, res, 'Environment configuration completed');
-
-            // Merge environment variables and create build args
-            const rootEnvPath = '/workspace/.env';
-            const localEnvPath = `${repoPath}/.env`;
-            const buildArgs = mergeEnvAndCreateBuildArgs(rootEnvPath, localEnvPath);
-            
-            res.write(`data: ${JSON.stringify({ 
-                type: 'output', 
-                message: `✅ Environment variables merged: ${buildArgs.split('--build-arg').length - 1} variables`,
-                timestamp: new Date().toISOString()
-            })}\n\n`);
-
-            // Step 4: Build Docker image
-            res.write(`data: ${JSON.stringify({ 
-                type: 'progress', 
-                message: '🐳 Building Docker image (this may take several minutes)...',
-                step: 4,
-                totalSteps: totalSteps
-            })}\n\n`);
-            
-            const buildCmd = `docker build -t ${config.imageName} ${buildArgs} ${repoPath}`;
-            await runBashWithProgress(buildCmd, res, 'Docker image built successfully');
-
-            // Step 5: Run container
-            res.write(`data: ${JSON.stringify({ 
-                type: 'progress', 
-                message: '🚀 Starting Docker container...',
-                step: 5,
-                totalSteps: totalSteps
-            })}\n\n`);
-            
-            const runCmd = `docker rm -f ${config.containerName} || true && docker run -d --name ${config.containerName} --network ${networkName} -p ${config.port}:${config.port} ${config.imageName}`;
-            await runBashWithProgress(runCmd, res, 'Container started successfully');
-
-        } else if (config.installType === 'docker-compose') {
-            // Step 3: Setup environment files
-            res.write(`data: ${JSON.stringify({ 
-                type: 'progress', 
-                message: '⚙️ Setting up environment configuration files...',
-                step: 3,
-                totalSteps: totalSteps
-            })}\n\n`);
-            
-            await runBashWithProgress(`find ${repoPath} -name ".env.example" -exec sh -c 'cp "$1" "$(dirname "$1")/.env"' _ {} \\;`, res, 'Environment files setup completed');
-
-            // Step 4: Install docker-compose if needed
-            res.write(`data: ${JSON.stringify({ 
-                type: 'progress', 
-                message: '📦 Installing Docker Compose if needed...',
-                step: 4,
-                totalSteps: totalSteps
-            })}\n\n`);
-            
-            try {
-                await runBashWithProgress(`which docker-compose || (wget -O /usr/local/bin/docker-compose "https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-$(uname -s)-$(uname -m)" && chmod +x /usr/local/bin/docker-compose)`, res, 'Docker Compose installation completed');
-
-                // Step 5: Build and run with docker-compose
-                res.write(`data: ${JSON.stringify({ 
-                    type: 'progress', 
-                    message: '🐳 Building and starting services with Docker Compose...',
-                    step: 5,
-                    totalSteps: totalSteps
-                })}\n\n`);
-                
-                // First, stop any existing containers that might be using the ports
-                await runBashWithProgress(`cd ${repoPath} && docker-compose down`, res, 'Stopped existing containers');
-                
-                // Check and free up ports that might be in use
-                if (config.additionalPorts) {
-                    for (const port of config.additionalPorts) {
-                        await runBashWithProgress(`docker ps -q --filter "publish=${port}" | xargs -r docker stop`, res, `Freed up port ${port}`);
-                    }
+        // Read local .env file
+        let localEnvVars = {};
+        if (fs.existsSync(localEnvPath)) {
+            const localContent = fs.readFileSync(localEnvPath, 'utf8');
+            localContent.split('\n').forEach(line => {
+                const trimmedLine = line.trim();
+                if (trimmedLine && !trimmedLine.startsWith('#') && trimmedLine.includes('=')) {
+                    const [key, ...valueParts] = trimmedLine.split('=');
+                    localEnvVars[key.trim()] = valueParts.join('=').trim();
                 }
-                
-                // Now try to start the services
-                const composeCmd = `cd ${repoPath} && docker-compose up -d --build`;
-                await runBashWithProgress(composeCmd, res, 'Docker Compose services started successfully');
+            });
+        }
+
+        // Merge: start with local, add missing from root
+        const mergedEnvVars = { ...localEnvVars };
+        Object.keys(rootEnvVars).forEach(varName => {
+            if (rootEnvVars[varName] && !mergedEnvVars[varName]) {
+                mergedEnvVars[varName] = rootEnvVars[varName];
+            }
+        });
+
+        // Write merged environment variables to file
+        const envContent = Object.entries(mergedEnvVars)
+            .map(([key, value]) => `${key}=${value}`)
+            .join('\n');
+
+        fs.writeFileSync(outputPath, envContent);
+
+        console.log(`✅ Merged ${Object.keys(mergedEnvVars).length} environment variables and wrote to ${outputPath}`);
+        return mergedEnvVars;
+    } catch (error) {
+        console.error('❌ Error merging environment files:', error);
+        throw error;
+    }
+}
+
+/**
+ * Common function to merge environment variables for all service types
+ * @param {string} rootEnvPath - Path to root .env file
+ * @param {string} localEnvPath - Path to local .env file
+ * @param {string} installType - Type of installation (docker or docker-compose)
+ * @param {string} repoPath - Path to repository
+ * @returns {Promise<object>} - Object containing buildArgs and tempEnvPath
+ */
+async function mergeEnvironmentVariables(rootEnvPath, localEnvPath, installType, repoPath) {
+    try {
+        if (installType === 'docker-compose') {
+            // For docker-compose, create a temporary merged .env file
+            const tempEnvPath = `${repoPath}/.env.temp`;
+            const mergedEnvVars = mergeEnvAndWriteToFile(rootEnvPath, localEnvPath, tempEnvPath);
+            console.log(`✅ Environment variables merged into temporary .env file`);
+            return { buildArgs: '', tempEnvPath };
+        } else {
+            // For regular docker services, use build args
+            const buildArgs = mergeEnvAndCreateBuildArgs(rootEnvPath, localEnvPath) || '';
+            console.log('📋 Build args generated:', buildArgs);
+            return { buildArgs, tempEnvPath: '' };
+        }
+    } catch (error) {
+        console.error('❌ Error merging environment variables:', error);
+        console.log('⚠️ Continuing with existing .env file...');
+        return { buildArgs: '', tempEnvPath: localEnvPath }; // Fallback to original .env
+    }
+}
+
+/**
+ * Common function to handle docker-compose environment file management
+ * @param {string} tempEnvPath - Path to temporary .env file
+ * @param {string} localEnvPath - Path to local .env file
+ * @param {function} composeCommand - Function to execute docker-compose command
+ * @param {object} res - Express response object
+ * @returns {Promise<void>}
+ */
+async function handleDockerComposeWithEnvMerge(tempEnvPath, localEnvPath, composeCommand, res) {
+    let originalEnvBackup = '';
+    try {
+        // For docker-compose, use temporary merged .env file
+        if (tempEnvPath && tempEnvPath !== localEnvPath) {
+            // Backup original .env file
+            if (fs.existsSync(localEnvPath)) {
+                originalEnvBackup = `${localEnvPath}.backup`;
+                await runBashWithProgress(`cp ${localEnvPath} ${originalEnvBackup}`, res, 'Backing up original .env file');
+            }
+            
+            // Replace .env with merged version
+            await runBashWithProgress(`cp ${tempEnvPath} ${localEnvPath}`, res, 'Using merged environment variables');
+        }
+        
+        // Execute the docker-compose command
+        await composeCommand();
+        
+    } finally {
+        // Restore original .env file and clean up
+        if (tempEnvPath && tempEnvPath !== localEnvPath) {
+            try {
+                if (originalEnvBackup && fs.existsSync(originalEnvBackup)) {
+                    await runBashWithProgress(`cp ${originalEnvBackup} ${localEnvPath}`, res, 'Restoring original .env file');
+                    await runBashWithProgress(`rm -f ${originalEnvBackup}`, res, 'Cleaned up backup .env file');
+                }
+                await runBashWithProgress(`rm -f ${tempEnvPath}`, res, 'Cleaned up temporary .env file');
             } catch (error) {
-                res.write(`data: ${JSON.stringify({ 
-                    type: 'progress', 
-                    message: '⚠️ Docker Compose failed, trying alternative approach...',
-                    step: 5,
-                    totalSteps: totalSteps
-                })}\n\n`);
-                
-                // Fallback: try to find and build individual services
-                res.write(`data: ${JSON.stringify({ 
-                    type: 'output', 
-                    message: '🔍 Looking for individual Dockerfiles in subdirectories...',
-                    timestamp: new Date().toISOString()
-                })}\n\n`);
-                
-                // Look for Dockerfiles in subdirectories (frontend, node, python)
-                await runBashWithProgress(`cd ${repoPath} && find . -name "Dockerfile" -type f`, res, 'Found Dockerfiles');
-                
-                // Try to build the main service (usually frontend or the one with the main Dockerfile)
-                await runBashWithProgress(`cd ${repoPath}/frontend && if [ -f Dockerfile ]; then docker build -t ${config.imageName} .; else echo "No Dockerfile in frontend"; fi`, res, 'Frontend Docker image built');
-                
-                // Run the container
-                await runBashWithProgress(`docker run -d --name ${config.containerName} --network ${networkName} -p ${config.port}:${config.port} ${config.imageName}`, res, 'Container started successfully');
+                console.log('⚠️ Could not clean up temporary files:', error.message);
+            }
+        }
+    }
+}
+
+
+// ============================================================================
+// SOLUTION CONFIGURATIONS
+// ============================================================================
+// Each solution configuration contains all necessary information for installation
+// Add new solutions here with their specific requirements
+
+// ============================================================================
+// SERVICE INSTALLATION BLOCKS
+// ============================================================================
+
+/**
+ * DOCKER SERVICE BLOCK
+ * Handles installation for services that use simple Docker (single container)
+ * Examples: ai-doc-editor, simple Node.js apps, etc.
+ */
+async function installDockerService(config, repoPath, res, totalSteps) {
+    const networkName = 'weamai_app-network';
+    
+    // Step 3: Setup environment (Docker only)
+    console.log('⚙️ Setting up environment configuration...');
+    await runBashWithProgress(`cp ${repoPath}/${config.envFile} ${repoPath}/.env`, res, 'Environment configuration completed');
+
+    // Merge environment variables and create build args
+    const rootEnvPath = '/workspace/.env';
+    const localEnvPath = `${repoPath}/.env`;
+    const buildArgs = mergeEnvAndCreateBuildArgs(rootEnvPath, localEnvPath);
+    
+    // Step 4: Build Docker image
+    console.log('🐳 Building Docker image (this may take several minutes)...');
+    const buildCmd = `docker build -t ${config.imageName} ${buildArgs} ${repoPath}`;
+    await runBashWithProgress(buildCmd, res, 'Docker image built successfully');
+
+    // Step 5: Run container
+    console.log('🚀 Starting Docker container...');
+    const runCmd = `docker rm -f ${config.containerName} || true && docker run -d --name ${config.containerName} --network ${networkName} -p ${config.port}:${config.port} ${config.imageName}`;
+    await runBashWithProgress(runCmd, res, 'Container started successfully');
+}
+
+/**
+ * Detects repository structure and available Docker files
+ * @param {string} repoPath - Path to the repository
+ * @param {object} res - Express response object
+ * @returns {Promise<object>} - Repository structure information
+ */
+async function detectRepositoryStructure(repoPath, res) {
+    const structure = {
+        hasDockerCompose: false,
+        hasRootDockerfile: false,
+        subdirectories: [],
+        dockerfiles: [],
+        composeFile: null
+    };
+
+    try {
+        console.log('🔍 Analyzing repository structure...');
+        
+        // Check for docker-compose files
+        const composeFiles = ['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml'];
+        for (const file of composeFiles) {
+            try {
+                await runBashWithProgress(`test -f ${repoPath}/${file}`, res, `Checking for ${file}`);
+                structure.hasDockerCompose = true;
+                structure.composeFile = file;
+                console.log(`✅ Found Docker Compose file: ${file}`);
+                break;
+            } catch (error) {
+                // File doesn't exist, continue checking
             }
         }
 
-        // Final success message
-        res.write(`data: ${JSON.stringify({ 
-            type: 'success', 
-            message: `✅ Installation completed successfully! Your ${config.repoName} solution is now running at http://localhost:${config.port}`,
-            url: `http://localhost:${config.port}`,
-            step: totalSteps,
-            totalSteps: totalSteps,
-            solutionType: solutionType
-        })}\n\n`);
+        // Check for root Dockerfile
+        try {
+            await runBashWithProgress(`test -f ${repoPath}/Dockerfile`, res, 'Checking for root Dockerfile');
+            structure.hasRootDockerfile = true;
+            console.log('✅ Found root Dockerfile');
+        } catch (error) {
+            // No root Dockerfile
+        }
 
-        console.log('✅ Solution installation success! Visit 👉 http://localhost:' + config.port);
+        // Find all Dockerfiles in subdirectories using a more efficient approach
+        try {
+            const findCmd = `find ${repoPath} -name "Dockerfile" -type f -not -path "${repoPath}/Dockerfile"`;
+            const dockerfileOutput = await runBashWithOutput(findCmd);
+            if (dockerfileOutput) {
+                const dockerfilePaths = dockerfileOutput.split('\n').filter(path => path.trim());
+                for (const path of dockerfilePaths) {
+                    // Extract directory name from path
+                    const relativePath = path.replace(`${repoPath}/`, '');
+                    const dirName = relativePath.split('/')[0];
+                    if (dirName && !structure.dockerfiles.includes(dirName)) {
+                        structure.dockerfiles.push(dirName);
+                        console.log(`✅ Found Dockerfile in: ${dirName}`);
+                    }
+                }
+            }
+        } catch (error) {
+            // No subdirectory Dockerfiles found
+        }
+
+        // Get list of subdirectories that might contain services
+        const commonServiceDirs = ['frontend', 'backend', 'node', 'python', 'api', 'web', 'app'];
+        for (const dir of commonServiceDirs) {
+            try {
+                await runBashWithProgress(`test -d ${repoPath}/${dir}`, res, `Checking for ${dir} directory`);
+                if (!structure.subdirectories.includes(dir)) {
+                    structure.subdirectories.push(dir);
+                }
+            } catch (error) {
+                // Directory doesn't exist
+            }
+        }
+
+        console.log('📋 Repository structure detected:', JSON.stringify(structure, null, 2));
+        return structure;
+    } catch (error) {
+        console.error('❌ Error detecting repository structure:', error);
+        return structure;
+    }
+}
+
+/**
+ * DOCKER-COMPOSE SERVICE BLOCK
+ * Handles installation for services that use Docker Compose (multiple containers)
+ * Auto-detects Docker Compose version and uses appropriate commands
+ * Dynamically handles different repository structures
+ * Examples: seo-content-gen, foloup, microservices, etc.
+ */
+async function installDockerComposeService(config, repoPath, res, totalSteps) {
+    const networkName = 'weamai_app-network';
+    
+    // Step 3: Setup environment files
+    console.log('⚙️ Setting up environment configuration files...');
+    await runBashWithProgress(`find ${repoPath} -name ".env.example" -exec sh -c 'cp "$1" "$(dirname "$1")/.env"' _ {} \\;`, res, 'Environment files setup completed');
+    
+    // Special handling for foloup - ensure basePath starts with /
+    if (config.repoName === 'foloup') {
+        console.log('🔧 Fixing Next.js configuration for foloup...');
+        const localEnvPath = `${repoPath}/.env`;
+        if (!fs.existsSync(localEnvPath)) {
+            const basicEnvContent = `NEXT_PUBLIC_API_BASE_PATH=/
+NODE_ENV=production`;
+            fs.writeFileSync(localEnvPath, basicEnvContent);
+        }
+    }
+    
+    // Merge environment variables for all services (common approach)
+    console.log('🔧 Preparing environment variables for Docker build...');
+    const rootEnvPath = '/workspace/.env';
+    const localEnvPath = `${repoPath}/.env`;
+    
+    // Use common environment merging function for all services
+    const envMergeResult = await mergeEnvironmentVariables(rootEnvPath, localEnvPath, config.installType, repoPath);
+    const { buildArgs, tempEnvPath } = envMergeResult;
+
+    // Step 4: Detect repository structure
+    console.log('🔍 Detecting repository structure...');
+    const repoStructure = await detectRepositoryStructure(repoPath, res);
+
+    // Step 5: Detect and install Docker Compose if needed
+    console.log('🔍 Detecting Docker Compose...');
+    let composeInfo;
+    try {
+        composeInfo = await detectDockerCompose();
+    } catch (error) {
+        console.error('❌ Error detecting Docker Compose:', error);
+        composeInfo = {
+            command: 'docker-compose',
+            needsInstall: true
+        };
+    }
+    
+    if (composeInfo.needsInstall) {
+        try {
+            await installDockerComposeV2(res);
+        } catch (error) {
+            console.error('❌ Error installing Docker Compose:', error);
+            console.log('⚠️ Continuing with fallback approach...');
+        }
+    }
+
+    // Step 6: Install based on repository structure
+    console.log(`🐳 Building and starting services...`);
+    
+    try {
+        // First, stop any existing containers that might be using the ports
+        if (repoStructure.hasDockerCompose) {
+            const downCmd = `cd ${repoPath} && ${composeInfo.command} down`;
+            await runBashWithProgress(downCmd, res, 'Stopped existing containers');
+        }
+        
+        // Check and free up ports that might be in use
+        if (config.additionalPorts) {
+            for (const port of config.additionalPorts) {
+                await runBashWithProgress(`docker ps -q --filter "publish=${port}" | xargs -r docker stop`, res, `Freed up port ${port}`);
+            }
+        }
+
+        // Primary approach: Use docker-compose if available
+        if (repoStructure.hasDockerCompose) {
+            console.log(`📦 Using Docker Compose (${repoStructure.composeFile})...`);
+            
+            // Use common function to handle docker-compose with environment merging
+            await handleDockerComposeWithEnvMerge(tempEnvPath, localEnvPath, async () => {
+                const composeCmd = `cd ${repoPath} && ${composeInfo.command} up -d --build`;
+                await runBashWithProgress(composeCmd, res, `Docker Compose services started successfully`);
+            }, res);
+        } 
+        // Fallback 1: Use root Dockerfile if available
+        else if (repoStructure.hasRootDockerfile) {
+            console.log('📦 Using root Dockerfile...');
+            const buildCmd = `docker build -t ${config.imageName} ${buildArgs} ${repoPath}`;
+            await runBashWithProgress(buildCmd, res, 'Docker image built successfully');
+            
+            const runCmd = `docker rm -f ${config.containerName} || true && docker run -d --name ${config.containerName} --network ${networkName} -p ${config.port}:${config.port} ${config.imageName}`;
+            await runBashWithProgress(runCmd, res, 'Container started successfully');
+        }
+        // Fallback 2: Use subdirectory Dockerfiles
+        else if (repoStructure.dockerfiles.length > 0) {
+            console.log(`📦 Using subdirectory Dockerfiles: ${repoStructure.dockerfiles.join(', ')}`);
+            
+            // Build each service
+            for (const serviceDir of repoStructure.dockerfiles) {
+                const serviceImageName = `${config.imageName}-${serviceDir}`;
+                const buildCmd = `cd ${repoPath}/${serviceDir} && docker build -t ${serviceImageName} ${buildArgs} .`;
+                await runBashWithProgress(buildCmd, res, `${serviceDir} Docker image built successfully`);
+            }
+            
+            // Run the main service (prioritize frontend, then first available)
+            let mainService = repoStructure.dockerfiles.find(dir => dir === 'frontend') || repoStructure.dockerfiles[0];
+            const mainImageName = `${config.imageName}-${mainService}`;
+            const runCmd = `docker rm -f ${config.containerName} || true && docker run -d --name ${config.containerName} --network ${networkName} -p ${config.port}:${config.port} ${mainImageName}`;
+            await runBashWithProgress(runCmd, res, 'Main container started successfully');
+        }
+        // Fallback 3: Try to find any Dockerfile and build it
+        else {
+            console.log('🔍 Searching for any available Dockerfile...');
+            
+            try {
+                // Find any Dockerfile in the repository
+                const findCmd = `find ${repoPath} -name "Dockerfile" -type f | head -1`;
+                const dockerfilePath = await runBashWithOutput(findCmd);
+                
+                if (dockerfilePath) {
+                    const dockerfileDir = dockerfilePath.replace('/Dockerfile', '');
+                    console.log(`📦 Found Dockerfile at: ${dockerfileDir}`);
+                    
+                    const buildCmd = `cd ${dockerfileDir} && docker build -t ${config.imageName} ${buildArgs} .`;
+                    await runBashWithProgress(buildCmd, res, 'Docker image built successfully');
+                    
+                    const runCmd = `docker rm -f ${config.containerName} || true && docker run -d --name ${config.containerName} --network ${networkName} -p ${config.port}:${config.port} ${config.imageName}`;
+                    await runBashWithProgress(runCmd, res, 'Container started successfully');
+                } else {
+                    throw new Error('No Dockerfile found in repository');
+                }
+            } catch (error) {
+                console.error('❌ No suitable Docker configuration found:', error.message);
+                throw new Error(`No suitable Docker configuration found in repository. Please ensure the repository contains either a docker-compose.yml file or at least one Dockerfile.`);
+            }
+        }
+        
+    } catch (error) {
+        console.error('❌ All installation approaches failed:', error);
+        throw new Error(`Installation failed: ${error.message}`);
+    }
+}
+
+// ============================================================================
+// MAIN INSTALLATION FUNCTION
+// ============================================================================
+
+const installWithProgress = async (req, res) => {
+    try {
+        // Get solution type from request body
+        const solutionType = req.body?.solutionType;
+        
+        // Log the received solution type for debugging
+        console.log('🔍 Received solution type:', solutionType);
+        console.log('📋 Available solutions:', Object.keys(SOLUTION_CONFIGS));
+        console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+        
+        if (!solutionType) {
+            throw new Error('Solution type is required. Please provide solutionType in request body.');
+        }
+        
+        const config = SOLUTION_CONFIGS[solutionType];
+        
+        if (!config) {
+            throw new Error(`Unknown solution type: ${solutionType}. Available solutions: ${Object.keys(SOLUTION_CONFIGS).join(', ')}`);
+        }
+        
+        console.log(`✅ Installing solution: ${solutionType} (${config.installType})`);
+
+        const repoPath = `/workspace/${config.repoName}`;
+        const totalSteps = 5; // All services have 5 steps
+
+        // Step 1: Clean up existing repository
+        console.log('🧹 Cleaning up existing repository...');
+        await runBashWithProgress(`rm -rf ${repoPath}`, res, 'Repository cleanup completed');
+
+        // Step 2: Clone repository
+        console.log('📥 Cloning repository from GitHub...');
+        await runBashWithProgress(`git clone -b ${config.branchName} ${config.repoUrl} ${repoPath}`, res, 'Repository cloned successfully');
+
+        // Step 3-5: Install based on service type
+        if (config.installType === 'docker') {
+            await installDockerService(config, repoPath, res, totalSteps);
+        } else if (config.installType === 'docker-compose') {
+            await installDockerComposeService(config, repoPath, res, totalSteps);
+        } else {
+            throw new Error(`Unsupported installation type: ${config.installType}`);
+        }
+
+        // Final success message
+        console.log(`✅ Installation completed successfully! Your ${config.repoName} solution is now running at http://localhost:${config.port}`);
         return { success: true, port: config.port, solutionType };
     } catch (error) {
-        res.write(`data: ${JSON.stringify({ 
-            type: 'error', 
-            message: `❌ Installation failed: ${error.message}`,
-            error: error.message
-        })}\n\n`);
+        console.error(`❌ Installation failed: ${error.message}`);
         handleError(error, 'Error - solutionInstallWithProgress');
         throw error;
     }

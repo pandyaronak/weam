@@ -277,13 +277,35 @@ const SuperSolutionPage = () => {
 
     const [loadingDownloadSolution, setLoadingDownloadSolution] = useState(false);
 
-    const handleInstall = async (solutionType: string = 'ai-doc-editor') => {
+    // Mapping from app names to solution types
+    const getSolutionTypeFromAppName = (appName: string): string => {
+        const mapping: { [key: string]: string } = {
+            'AI Docs': 'ai-doc-editor',
+            'SEO Content Gen': 'seo-content-gen',
+            'Foloup': 'followup'
+        };
+        return mapping[appName] || 'ai-doc-editor';
+    };
+
+    const getInstallButtonText = (appName: string): string => {
+        const mapping: { [key: string]: string } = {
+            'AI Docs': 'Install AI Doc Editor',
+            'SEO Content Gen': 'Install SEO Content Gen',
+            'Foloup': 'Install Foloup Agent'
+        };
+        return mapping[appName] || 'Install Solution';
+    };
+
+    const handleInstall = async (solutionType?: string) => {
+        // If no solutionType provided, get it from selectedApp
+        const finalSolutionType = solutionType || (selectedApp ? getSolutionTypeFromAppName(selectedApp.name) : 'ai-doc-editor');
+        console.log('SuperSolution handleInstall - solutionType:', solutionType, 'selectedApp:', selectedApp?.name, 'finalSolutionType:', finalSolutionType);
         try {
             setLoadingDownloadSolution(true);
             // Directly connect to the progress endpoint to avoid double execution
             const token = await getAccessToken();
             const baseUrl = `${LINK.COMMON_NODE_API_URL}${NODE_API_PREFIX}`;
-            const url = `${baseUrl}/web/solution-install-progress/progress?token=${encodeURIComponent(token)}&solutionType=${encodeURIComponent(solutionType)}`;
+            const url = `${baseUrl}/web/solution-install-progress/progress?token=${encodeURIComponent(token)}&solutionType=${encodeURIComponent(finalSolutionType)}`;
 
             // Create EventSource for SSE
             const eventSource = new EventSource(url);
@@ -485,13 +507,9 @@ const SuperSolutionPage = () => {
                                 </div>
                                 {selectedApp.name} - Access Management
                                 <div className="flex gap-2">
-                                    <Button className="inline-flex items-center cursor-pointer px-2 py-1 rounded-md bg-white border border-b8 hover:bg-b11 transition ease-in-out duration-150" onClick={() => handleInstall('ai-doc-editor')} disabled={loadingDownloadSolution}>
+                                    <Button className="inline-flex items-center cursor-pointer px-2 py-1 rounded-md bg-white border border-b8 hover:bg-b11 transition ease-in-out duration-150" onClick={() => handleInstall()} disabled={loadingDownloadSolution}>
                                         <DownloadIcon className="w-4 h-4 mr-2" />
-                                        {loadingDownloadSolution ? 'Installing...' : 'Install AI Doc Editor'}
-                                    </Button>
-                                    <Button className="inline-flex items-center cursor-pointer px-2 py-1 rounded-md bg-white border border-b8 hover:bg-b11 transition ease-in-out duration-150" onClick={() => handleInstall('seo-content-gen')} disabled={loadingDownloadSolution}>
-                                        <DownloadIcon className="w-4 h-4 mr-2" />
-                                        {loadingDownloadSolution ? 'Installing...' : 'Install SEO Content Gen'}
+                                        {loadingDownloadSolution ? 'Installing...' : getInstallButtonText(selectedApp?.name || '')}
                                     </Button>
                                 </div>
                             </DialogTitle>

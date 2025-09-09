@@ -8,6 +8,24 @@
         "isActive": true,
         "pathToOpen": "/ai-doc",
         "sequence": 1
+      },
+      {
+        "name": "SEO Content Gen",
+        "description": "AI-powered document editor with dual editor modes (Rich Text & Markdown), smart templates, and OpenAI integration for document generation and formatting",
+        "icon": "document-edit-icon",
+        "category": "Productivity & Document Management",
+        "isActive": true,
+        "pathToOpen": "/seo-content-gen",
+        "sequence": 2
+      },
+      {
+        "name": "Foloup",
+        "description": "AI-powered document editor with dual editor modes (Rich Text & Markdown), smart templates, and OpenAI integration for document generation and formatting",
+        "icon": "document-edit-icon",
+        "category": "Productivity & Document Management",
+        "isActive": true,
+        "pathToOpen": "/followup",
+        "sequence": 3
       }
     ]
   }

@@ -59,7 +59,15 @@ const getInstallationProgress = catchAsync(async (req, res) => {
     // Start the installation process
     try {
         // Get solution type from query parameter
-        const solutionType = req.query.solutionType || 'ai-doc-editor';
+        let solutionType = req.query.solutionType;
+        console.log('Backend received solutionType:', solutionType, 'type:', typeof solutionType); // Debug log
+        console.log('Full query object:', req.query); // Debug log
+        
+        // Handle case where solutionType might be string "undefined"
+        if (solutionType === 'undefined' || solutionType === 'null' || !solutionType) {
+            return res.status(400).json({ message: 'Solution type is required' });
+        }
+        
         req.body = { solutionType }; // Pass solution type to service
         await solutionInstallService.installWithProgress(req, res);
     } catch (error) {

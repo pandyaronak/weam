@@ -19,12 +19,17 @@ interface SolutionInstallButtonProps {
     buttonText?: string;
 }
 
-const SolutionInstallButton = ({ solutionType = 'ai-doc-editor', buttonText }: SolutionInstallButtonProps) => {
+const SolutionInstallButton = ({ solutionType, buttonText }: SolutionInstallButtonProps) => {
     const [loading, setLoading] = useState(false);
     const [progress, setProgress] = useState<ProgressEvent | null>(null);
     const [showProgress, setShowProgress] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
     const eventSourceRef = useRef<EventSource | null>(null);
+
+    // Ensure solutionType is valid, fallback to default if undefined
+    console.log('SolutionInstallButton rendered with solutionType:', solutionType, 'type:', typeof solutionType, 'buttonText:', buttonText);
+    const validSolutionType = (solutionType && typeof solutionType === 'string' && solutionType !== 'undefined' && solutionType !== 'null') ? solutionType : 'ai-doc-editor';
+    console.log('Using validSolutionType:', validSolutionType);
 
     const handleInstall = async () => {
         try {
@@ -33,9 +38,12 @@ const SolutionInstallButton = ({ solutionType = 'ai-doc-editor', buttonText }: S
             setProgress(null);
             setLogs([]);
 
+            console.log('Installing solution type:', validSolutionType); // Debug log
             const token = await getAccessToken();
             const baseUrl = `${LINK.COMMON_NODE_API_URL}${NODE_API_PREFIX}`;
-            const url = `${baseUrl}/web/solution-install-progress/progress?token=${encodeURIComponent(token)}&solutionType=${encodeURIComponent(solutionType)}`;
+            const url = `${baseUrl}/web/solution-install-progress/progress?token=${encodeURIComponent(token)}&solutionType=${encodeURIComponent(validSolutionType)}`;
+            console.log('Installation URL:', url); // Debug log
+            console.log('Encoded solutionType:', encodeURIComponent(validSolutionType)); // Debug log
 
             // Create EventSource for SSE
             const eventSource = new EventSource(url);
