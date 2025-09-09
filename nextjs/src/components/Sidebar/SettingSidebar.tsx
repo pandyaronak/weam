@@ -5,16 +5,11 @@ import {
     SettingsIcon,
 } from '@/icons/SettingsIcon';
 import SuperSolutionIcon from '@/icons/SuperSolutionIcon';
-import Link from 'next/link';
 import React from 'react';
 import { LINK } from '@/config/config';
 import { getSessionUser } from '@/utils/handleAuth';
 import { ROLE_TYPE } from '@/utils/constant';
 import { hasPermission, PERMISSIONS, Role } from '@/utils/permission';
-import routes from '@/utils/routes';
-import Setting from '@/icons/Setting';
-import TemplateIcon from '@/icons/TemplateIcon';
-import ArrowBack from '@/icons/ArrowBack';
 import { TemplateLibrary } from './SettingSelection';
 import ReportIcon from '@/icons/ReportIcon';
 import PrivateVisible from '../Brains/PrivateVisible';
@@ -24,8 +19,8 @@ import StorageIcon from '@/icons/StorageIcon';
 import SupportIcon from '@/icons/SupportIcon';
 import SidebarFooter from './SidebarFooter';
 import SettingOptions from './SettingOptions';
-import CreditControlIcon from '@/icons/CreditControlIcon';
 import SolutionAppIcon from '@/icons/SolutionsIcons';
+import CreditControlIcon from '@/icons/CreditControlIcon';
 
 const BackButton = dynamic(() => import('./BackButton'), { ssr: false });
 const SettingsLink = dynamic(() => import('./SettingsLink'), { ssr: false });
@@ -164,7 +159,7 @@ const SettingSidebar = async () => {
             hasAccess: (userDetail?.roleCode == ROLE_TYPE.COMPANY) ? true : false,
             navigate: `${LINK.DOMAIN_URL}/settings/credit-control`,
             slug: '/settings/credit-control',
-        },
+        }
     ];
     return (
         <>
