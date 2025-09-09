@@ -9,7 +9,6 @@ import useAssignModalList from '@/hooks/aiModal/useAssignModalList';
 import Image from 'next/image';
 import { BrainAgentType, BrainPromptType, BrainListType } from '@/types/brain';
 import {
-    decodedObjectId,
     encodedObjectId,
     generateObjectId,
     persistBrainData,
@@ -67,7 +66,6 @@ import PromptIcon from '@/icons/Prompt';
 import Customgpt from '@/icons/Customgpt';
 import DocumentIcon from '@/icons/DocumentIcon';
 import { getSelectedBrain, isEmptyObject, truncateText } from '@/utils/common';
-import { getDisplayModelName } from '@/utils/helper';
 import AIPagesIcon from '@/icons/AIPagesIcon';
 import Link from 'next/link';
 import CustomPromptAction from '@/actions/CustomPromptAction';
@@ -314,25 +312,25 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
 
         const listOptions = [
             {
-                icon: <ChatIcon width={20} height={20}  className="fill-b6"/>,
+                icon: <ChatIcon width={18} height={18}  className="fill-b6 w-4 h-auto"/>,
                 text: 'Chats',
                 id: 1,
                 href: routes.chat,
             },
             {
-                icon: <PromptIcon width={20} height={20} className="fill-b6" />,
+                icon: <PromptIcon width={18} height={18} className="fill-b6 w-4 h-auto" />,
                 text: 'Prompts',
                 id: 2,
                 href: routes.prompts,
             },
             {
-                icon: <Customgpt width={20} height={20} className="fill-b6" />,
+                icon: <Customgpt width={18} height={18} className="fill-b6 w-4 h-auto" />,
                 text: 'Agents',
                 id: 3,
                 href: routes.customGPT,
             },
             {
-                icon: <DocumentIcon width={20} height={20} className="fill-b6" />,
+                icon: <DocumentIcon width={18} height={18} className="fill-b6 w-4 h-auto" />,
                 text: 'Docs',
                 id: 4,
                 href: routes.docs,
@@ -1034,7 +1032,6 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                 
             </div>
         </div>
-        </>
     );
 };
 
