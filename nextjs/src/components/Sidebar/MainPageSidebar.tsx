@@ -10,6 +10,7 @@ import Notification from './Notification';
 import NotificationDot from './NotificationDot';
 import UserProfile from './UserProfile';
 import { getSession } from '@/config/withSession';
+import { hasPermission, PERMISSIONS } from '@/utils/permission';
 import { fetchWorkspaceList } from '@/actions/workspace';
 import { fetchBrainList } from '@/actions/brains';
 import { TemplateLibrary } from './SettingSelection';
