@@ -69,6 +69,7 @@ import { getSelectedBrain, isEmptyObject, truncateText } from '@/utils/common';
 import AIPagesIcon from '@/icons/AIPagesIcon';
 import Link from 'next/link';
 import CustomPromptAction from '@/actions/CustomPromptAction';
+import PromptCardSkeleton from '@/components/Loader/PromptCardSkeleton';
 
 const defaultContext = {
     type: null,
@@ -767,24 +768,7 @@ const ChatInput = ({ aiModals }: ChatInputProps) => {
                         </div>
                     ))}
                     {customPrompts.length === 0 && (
-                        <React.Fragment>
-                            <div className='border rounded-md p-5 bg-white hover:bg-b12 cursor-pointer'>
-                                <h3 className='text-font-14 font-bold text-b5'>Loading...</h3>
-                                <p className='text-font-14 text-b8'>Please wait while we load prompts...</p>
-                            </div>
-                            <div className='border rounded-md p-5 bg-white hover:bg-b12 cursor-pointer'>
-                                <h3 className='text-font-14 font-bold text-b5'>Loading...</h3>
-                                <p className='text-font-14 text-b8'>Please wait while we load prompts...</p>
-                            </div>
-                            <div className='border rounded-md p-5 bg-white hover:bg-b12 cursor-pointer'>
-                                <h3 className='text-font-14 font-bold text-b5'>Loading...</h3>
-                                <p className='text-font-14 text-b8'>Please wait while we load prompts...</p>
-                            </div>
-                            <div className='border rounded-md p-5 bg-white hover:bg-b12 cursor-pointer'>
-                                <h3 className='text-font-14 font-bold text-b5'>Loading...</h3>
-                                <p className='text-font-14 text-b8'>Please wait while we load prompts...</p>
-                            </div>
-                        </React.Fragment>
+                        <PromptCardSkeleton count={4} />
                     )}
                 </div>
                 
