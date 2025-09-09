@@ -4,11 +4,13 @@ import {
     MembersIcon,
     SettingsIcon,
 } from '@/icons/SettingsIcon';
+import SuperSolutionIcon from '@/icons/SuperSolutionIcon';
 import Link from 'next/link';
 import React from 'react';
 import { LINK } from '@/config/config';
 import { getSessionUser } from '@/utils/handleAuth';
 import { ROLE_TYPE } from '@/utils/constant';
+import { hasPermission, PERMISSIONS, Role } from '@/utils/permission';
 import routes from '@/utils/routes';
 import Setting from '@/icons/Setting';
 import TemplateIcon from '@/icons/TemplateIcon';
@@ -23,6 +25,7 @@ import SupportIcon from '@/icons/SupportIcon';
 import SidebarFooter from './SidebarFooter';
 import SettingOptions from './SettingOptions';
 import CreditControlIcon from '@/icons/CreditControlIcon';
+import SolutionAppIcon from '@/icons/SolutionsIcons';
 
 const BackButton = dynamic(() => import('./BackButton'), { ssr: false });
 const SettingsLink = dynamic(() => import('./SettingsLink'), { ssr: false });
@@ -135,6 +138,19 @@ const SettingSidebar = async () => {
             navigate: 'https://weamai.freshdesk.com/support/tickets/new?ticket_form=report_an_issue',
             slug: '/support',
             target: '_blank',
+        },
+        {
+            name: 'Apps',
+            icon: (
+                <SolutionAppIcon
+                    height={18}
+                    width={18}
+                    className={'w-[18px] h-auto object-contain fill-b2'}
+                />
+            ),
+            hasAccess: hasPermission(userDetail?.roleCode as Role, PERMISSIONS.SUPER_SOLUTION_ACCESS),
+            navigate: `${LINK.DOMAIN_URL}/settings/super-solution`,
+            slug: '/settings/super-solution',
         },
         {
             name: 'Credit Control',

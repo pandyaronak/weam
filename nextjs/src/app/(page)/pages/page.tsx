@@ -15,6 +15,12 @@ import { RootState } from '@/lib/store';
 import { format } from 'date-fns';
 import Toast from '@/utils/toast';
 import  { useRouter } from 'next/navigation';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 type Page = {
     _id: string;
@@ -317,7 +323,7 @@ const PagesPage = () => {
     return (
         <div className="flex flex-col h-full">
             {/* Header */}
-            <header className="h-[68px] min-h-[68px] flex items-center space-x-2 py-2 md:pl-[15px] md:pr-[15px] pl-[50px] pr-[15px] max-md:sticky max-md:top-0 z-10 bg-white border-b border-gray-200">
+            <header className="top-header h-[68px] min-h-[68px] flex items-center space-x-2 py-2 md:pl-[15px] pl-[50px] pr-[15px] max-md:sticky max-md:top-0 z-10 bg-white">
                 <div className="size-[30px] flex items-center justify-center rounded-full p-1">
                     <DocumentIcon width={20} height={20} className="fill-b2 object-contain" />
                 </div>
@@ -325,8 +331,8 @@ const PagesPage = () => {
                     <p className="text-font-16 font-bold">
                         Pages
                     </p>
-                    <span className="text-font-16 text-gray-400">/</span>
-                    <p className="text-font-16 font-medium text-gray-600">
+                    <span className="inline-block mx-2.5">/</span>
+                    <p className="text-font-14">
                         {currentBrain ? currentBrain.title : 'Select a brain to view pages'}
                     </p>
                 </div>
@@ -365,36 +371,54 @@ const PagesPage = () => {
                                     <span className="text-gray-500 text-xs">Select brain</span>
                                 </div>
                             )}
-                            <button
-                                type="button"
-                                id="list-view"
-                                onClick={handleListViewClick}
-                                disabled={!brainId}
-                                className={`inline-block rounded-s-custom rounded-e-none btn border border-b10 bg-transparent w-10 h-10 p-2 hover:bg-b12 [&.active]:bg-b12 disabled:opacity-50 disabled:cursor-not-allowed ${
-                                    !isGridView ? 'active' : ''
-                                }`}
-                            >
-                                <BarIcon
-                                    width={14}
-                                    height={12}
-                                    className="w-[14px] h-3 object-contain mx-auto fill-b6"
-                                />
-                            </button>
-                            <button
-                                type="button"
-                                id="grid-view"
-                                onClick={handleGridViewClick}
-                                disabled={!brainId}
-                                className={`-ms-px inline-block rounded-none btn border border-b10 bg-transparent w-10 h-10 p-2 hover:bg-b12 [&.active]:bg-b12 disabled:opacity-50 disabled:cursor-not-allowed ${
-                                    isGridView ? 'active' : ''
-                                }`}
-                            >
-                                <GridIcon
-                                    width={14}
-                                    height={14}
-                                    className="w-[14px] h-[14px] object-contain mx-auto fill-b6"
-                                />
-                            </button>
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            type="button"
+                                            id="list-view"
+                                            onClick={handleListViewClick}
+                                            disabled={!brainId}
+                                            className={`inline-block rounded-s-custom rounded-e-none btn border border-b10 bg-transparent w-10 h-10 p-2 hover:bg-b12 [&.active]:bg-b12 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                                !isGridView ? 'active' : ''
+                                            }`}
+                                        >
+                                            <BarIcon
+                                                width={14}
+                                                height={12}
+                                                className="w-[14px] h-3 object-contain mx-auto fill-b6"
+                                            />
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="border-none">
+                                        <p className="text-font-14">List view</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            type="button"
+                                            id="grid-view"
+                                            onClick={handleGridViewClick}
+                                            disabled={!brainId}
+                                            className={`-ms-px inline-block rounded-none btn border border-b10 bg-transparent w-10 h-10 p-2 hover:bg-b12 [&.active]:bg-b12 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                                isGridView ? 'active' : ''
+                                            }`}
+                                        >
+                                            <GridIcon
+                                                width={14}
+                                                height={14}
+                                                className="w-[14px] h-[14px] object-contain mx-auto fill-b6"
+                                            />
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="border-none">
+                                        <p className="text-font-14">Grid view</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         </div>
 
                         {/* Page Count */}
