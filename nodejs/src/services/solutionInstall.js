@@ -339,7 +339,7 @@ async function handleDockerComposeWithEnvMerge(tempEnvPath, localEnvPath, compos
  * Examples: ai-doc-editor, simple Node.js apps, etc.
  */
 async function installDockerService(config, repoPath, res, totalSteps) {
-    const networkName = 'weamai_app-network';
+    const networkName = 'weam_app-network';
     
     // Step 3: Setup environment (Docker only)
     console.log('⚙️ Setting up environment configuration...');
@@ -451,7 +451,7 @@ async function detectRepositoryStructure(repoPath, res) {
  * Examples: seo-content-gen, foloup, microservices, etc.
  */
 async function installDockerComposeService(config, repoPath, res, totalSteps) {
-    const networkName = 'weamai_app-network';
+    const networkName = 'weam_app-network';
     
     // Step 3: Setup environment files
     console.log('⚙️ Setting up environment configuration files...');
