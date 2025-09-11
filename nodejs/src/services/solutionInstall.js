@@ -47,7 +47,7 @@ async function installDockerComposeV2(res) {
     
     try {
         // First check if docker-compose is already available
-        await runBashWithProgress('which docker-compose', res, 'Checking for existing Docker Compose');
+        await runBashWithOutput('which docker-compose');
         console.log('✅ Docker Compose already available');
         return;
     } catch (error) {
@@ -57,11 +57,11 @@ async function installDockerComposeV2(res) {
     const installCommand = `wget -O /usr/local/bin/docker-compose "https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-$(uname -s)-$(uname -m)" && chmod +x /usr/local/bin/docker-compose`;
     
     try {
-        await runBashWithProgress(installCommand, res, 'Docker Compose V2 installation completed');
+        await runBashWithOutput(installCommand);
         console.log('✅ Docker Compose V2 installed successfully');
         
         // Verify installation
-        await runBashWithProgress('docker-compose --version', res, 'Verifying Docker Compose installation');
+        await runBashWithOutput('docker-compose --version');
     } catch (error) {
         console.error('❌ Failed to install Docker Compose V2:', error);
         // Don't throw error, continue with fallback approach
@@ -70,17 +70,29 @@ async function installDockerComposeV2(res) {
 }
 
 /**
- * Executes bash commands with console output
+ * Executes bash commands with console output and progress updates
  * @param {string} command - The bash command to execute
- * @param {object} res - Express response object (kept for compatibility)
+ * @param {object} res - Express response object for SSE updates
  * @param {string} progressMessage - Optional progress message to log
+ * @param {number} currentStep - Current step number
+ * @param {number} totalSteps - Total number of steps
  * @returns {Promise} - Resolves when command completes successfully
  */
-function runBashWithProgress(command, res, progressMessage) {
+function runBashWithProgress(command, res, progressMessage, currentStep = 1, totalSteps = 5) {
     return new Promise((resolve, reject) => {
         // Log progress message
         if (progressMessage) {
             console.log(progressMessage);
+        }
+
+        // Send progress update at start of step (only for important steps, not Docker build)
+        if (res && res.write && (currentStep === 1 || currentStep === 2 || currentStep === 5)) {
+            res.write(`data: ${JSON.stringify({ 
+                type: 'progress', 
+                message: progressMessage || 'Executing command...',
+                step: currentStep,
+                totalSteps: totalSteps
+            })}\n\n`);
         }
 
         const child = spawn('sh', ['-c', command], {});
@@ -88,17 +100,43 @@ function runBashWithProgress(command, res, progressMessage) {
         child.stdout.on('data', (data) => {
             const output = String(data).trim();
             console.log(output);
+            
+            // Only send output to frontend for non-Docker build steps
+            if (res && res.write && currentStep !== 4) {
+                res.write(`data: ${JSON.stringify({ 
+                    type: 'output', 
+                    message: output
+                })}\n\n`);
+            }
         });
         
         child.stderr.on('data', (data) => {
             const error = String(data).trim();
             console.error(error);
+            
+            // Only send error output to frontend for non-Docker build steps
+            if (res && res.write && currentStep !== 4) {
+                res.write(`data: ${JSON.stringify({ 
+                    type: 'error_output', 
+                    message: error
+                })}\n\n`);
+            }
         });
         
         child.on('close', (code) => {
             if (code === 0) {
+                // Don't send step completion message - only send final success/error
                 resolve(code);
             } else {
+                // Send step failure (only for non-Docker build steps)
+                if (res && res.write && currentStep !== 4) {
+                    res.write(`data: ${JSON.stringify({ 
+                        type: 'error', 
+                        message: `Command failed: ${command}`,
+                        step: currentStep,
+                        totalSteps: totalSteps
+                    })}\n\n`);
+                }
                 reject(new Error(`Command failed: ${command}`));
             }
         });
@@ -129,6 +167,52 @@ function runBashWithOutput(command) {
                 resolve(output.trim());
             } else {
                 reject(new Error(`Command failed: ${command}. Error: ${errorOutput}`));
+            }
+        });
+    });
+}
+
+/**
+ * Executes bash commands for Docker build without sending progress updates
+ * @param {string} command - The bash command to execute
+ * @param {object} res - Express response object for SSE updates
+ * @param {string} progressMessage - Optional progress message to log
+ * @param {number} currentStep - Current step number
+ * @param {number} totalSteps - Total number of steps
+ * @returns {Promise} - Resolves when command completes successfully
+ */
+function runBashForDockerBuild(command, res, progressMessage, currentStep = 1, totalSteps = 5) {
+    return new Promise((resolve, reject) => {
+        // Log progress message
+        if (progressMessage) {
+            console.log(progressMessage);
+        }
+
+        // Don't send any progress updates for Docker build to avoid connection issues
+
+        const child = spawn('sh', ['-c', command], {});
+        
+        child.stdout.on('data', (data) => {
+            const output = String(data).trim();
+            console.log(output);
+            
+            // Don't send output to frontend during Docker build to avoid connection issues
+        });
+        
+        child.stderr.on('data', (data) => {
+            const error = String(data).trim();
+            console.error(error);
+            
+            // Don't send error output to frontend during Docker build to avoid connection issues
+        });
+        
+        child.on('close', (code) => {
+            if (code === 0) {
+                // Don't send completion message for Docker build
+                resolve(code);
+            } else {
+                // Don't send error message for Docker build to avoid connection issues
+                reject(new Error(`Command failed: ${command}`));
             }
         });
     });
@@ -296,11 +380,11 @@ async function handleDockerComposeWithEnvMerge(tempEnvPath, localEnvPath, compos
             // Backup original .env file
             if (fs.existsSync(localEnvPath)) {
                 originalEnvBackup = `${localEnvPath}.backup`;
-                await runBashWithProgress(`cp ${localEnvPath} ${originalEnvBackup}`, res, 'Backing up original .env file');
+                await runBashWithOutput(`cp ${localEnvPath} ${originalEnvBackup}`);
             }
             
             // Replace .env with merged version
-            await runBashWithProgress(`cp ${tempEnvPath} ${localEnvPath}`, res, 'Using merged environment variables');
+            await runBashWithOutput(`cp ${tempEnvPath} ${localEnvPath}`);
         }
         
         // Execute the docker-compose command
@@ -311,10 +395,10 @@ async function handleDockerComposeWithEnvMerge(tempEnvPath, localEnvPath, compos
         if (tempEnvPath && tempEnvPath !== localEnvPath) {
             try {
                 if (originalEnvBackup && fs.existsSync(originalEnvBackup)) {
-                    await runBashWithProgress(`cp ${originalEnvBackup} ${localEnvPath}`, res, 'Restoring original .env file');
-                    await runBashWithProgress(`rm -f ${originalEnvBackup}`, res, 'Cleaned up backup .env file');
+                    await runBashWithOutput(`cp ${originalEnvBackup} ${localEnvPath}`);
+                    await runBashWithOutput(`rm -f ${originalEnvBackup}`);
                 }
-                await runBashWithProgress(`rm -f ${tempEnvPath}`, res, 'Cleaned up temporary .env file');
+                await runBashWithOutput(`rm -f ${tempEnvPath}`);
             } catch (error) {
                 console.log('⚠️ Could not clean up temporary files:', error.message);
             }
@@ -339,11 +423,11 @@ async function handleDockerComposeWithEnvMerge(tempEnvPath, localEnvPath, compos
  * Examples: ai-doc-editor, simple Node.js apps, etc.
  */
 async function installDockerService(config, repoPath, res, totalSteps) {
-    const networkName = 'weam_app-network';
+    const networkName = 'weamai_app-network';
     
     // Step 3: Setup environment (Docker only)
     console.log('⚙️ Setting up environment configuration...');
-    await runBashWithProgress(`cp ${repoPath}/${config.envFile} ${repoPath}/.env`, res, 'Environment configuration completed');
+    await runBashWithProgress(`cp ${repoPath}/${config.envFile} ${repoPath}/.env`, res, 'Environment configuration completed', 3, totalSteps);
 
     // Merge environment variables and create build args
     const rootEnvPath = '/workspace/.env';
@@ -353,12 +437,12 @@ async function installDockerService(config, repoPath, res, totalSteps) {
     // Step 4: Build Docker image
     console.log('🐳 Building Docker image (this may take several minutes)...');
     const buildCmd = `docker build -t ${config.imageName} ${buildArgs} ${repoPath}`;
-    await runBashWithProgress(buildCmd, res, 'Docker image built successfully');
+    await runBashForDockerBuild(buildCmd, res, 'Docker image built successfully', 4, totalSteps);
 
     // Step 5: Run container
     console.log('🚀 Starting Docker container...');
     const runCmd = `docker rm -f ${config.containerName} || true && docker run -d --name ${config.containerName} --network ${networkName} -p ${config.port}:${config.port} ${config.imageName}`;
-    await runBashWithProgress(runCmd, res, 'Container started successfully');
+    await runBashWithProgress(runCmd, res, 'Container started successfully', 5, totalSteps);
 }
 
 /**
@@ -383,7 +467,7 @@ async function detectRepositoryStructure(repoPath, res) {
         const composeFiles = ['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml'];
         for (const file of composeFiles) {
             try {
-                await runBashWithProgress(`test -f ${repoPath}/${file}`, res, `Checking for ${file}`);
+                await runBashWithOutput(`test -f ${repoPath}/${file}`);
                 structure.hasDockerCompose = true;
                 structure.composeFile = file;
                 console.log(`✅ Found Docker Compose file: ${file}`);
@@ -395,7 +479,7 @@ async function detectRepositoryStructure(repoPath, res) {
 
         // Check for root Dockerfile
         try {
-            await runBashWithProgress(`test -f ${repoPath}/Dockerfile`, res, 'Checking for root Dockerfile');
+            await runBashWithOutput(`test -f ${repoPath}/Dockerfile`);
             structure.hasRootDockerfile = true;
             console.log('✅ Found root Dockerfile');
         } catch (error) {
@@ -426,7 +510,7 @@ async function detectRepositoryStructure(repoPath, res) {
         const commonServiceDirs = ['frontend', 'backend', 'node', 'python', 'api', 'web', 'app'];
         for (const dir of commonServiceDirs) {
             try {
-                await runBashWithProgress(`test -d ${repoPath}/${dir}`, res, `Checking for ${dir} directory`);
+                await runBashWithOutput(`test -d ${repoPath}/${dir}`);
                 if (!structure.subdirectories.includes(dir)) {
                     structure.subdirectories.push(dir);
                 }
@@ -451,11 +535,11 @@ async function detectRepositoryStructure(repoPath, res) {
  * Examples: seo-content-gen, foloup, microservices, etc.
  */
 async function installDockerComposeService(config, repoPath, res, totalSteps) {
-    const networkName = 'weam_app-network';
+    const networkName = 'weamai_app-network';
     
     // Step 3: Setup environment files
     console.log('⚙️ Setting up environment configuration files...');
-    await runBashWithProgress(`find ${repoPath} -name ".env.example" -exec sh -c 'cp "$1" "$(dirname "$1")/.env"' _ {} \\;`, res, 'Environment files setup completed');
+    await runBashWithProgress(`find ${repoPath} -name ".env.example" -exec sh -c 'cp "$1" "$(dirname "$1")/.env"' _ {} \\;`, res, 'Environment files setup completed', 3, totalSteps);
     
     // Special handling for foloup - ensure basePath starts with /
     if (config.repoName === 'foloup') {
@@ -510,13 +594,13 @@ NODE_ENV=production`;
         // First, stop any existing containers that might be using the ports
         if (repoStructure.hasDockerCompose) {
             const downCmd = `cd ${repoPath} && ${composeInfo.command} down`;
-            await runBashWithProgress(downCmd, res, 'Stopped existing containers');
+            await runBashWithOutput(downCmd);
         }
         
         // Check and free up ports that might be in use
         if (config.additionalPorts) {
             for (const port of config.additionalPorts) {
-                await runBashWithProgress(`docker ps -q --filter "publish=${port}" | xargs -r docker stop`, res, `Freed up port ${port}`);
+                await runBashWithOutput(`docker ps -q --filter "publish=${port}" | xargs -r docker stop`);
             }
         }
 
@@ -527,17 +611,17 @@ NODE_ENV=production`;
             // Use common function to handle docker-compose with environment merging
             await handleDockerComposeWithEnvMerge(tempEnvPath, localEnvPath, async () => {
                 const composeCmd = `cd ${repoPath} && ${composeInfo.command} up -d --build`;
-                await runBashWithProgress(composeCmd, res, `Docker Compose services started successfully`);
+                await runBashForDockerBuild(composeCmd, res, `Docker Compose services started successfully`, 4, totalSteps);
             }, res);
         } 
         // Fallback 1: Use root Dockerfile if available
         else if (repoStructure.hasRootDockerfile) {
             console.log('📦 Using root Dockerfile...');
             const buildCmd = `docker build -t ${config.imageName} ${buildArgs} ${repoPath}`;
-            await runBashWithProgress(buildCmd, res, 'Docker image built successfully');
+            await runBashForDockerBuild(buildCmd, res, 'Docker image built successfully', 4, totalSteps);
             
             const runCmd = `docker rm -f ${config.containerName} || true && docker run -d --name ${config.containerName} --network ${networkName} -p ${config.port}:${config.port} ${config.imageName}`;
-            await runBashWithProgress(runCmd, res, 'Container started successfully');
+            await runBashWithProgress(runCmd, res, 'Container started successfully', 5, totalSteps);
         }
         // Fallback 2: Use subdirectory Dockerfiles
         else if (repoStructure.dockerfiles.length > 0) {
@@ -547,14 +631,14 @@ NODE_ENV=production`;
             for (const serviceDir of repoStructure.dockerfiles) {
                 const serviceImageName = `${config.imageName}-${serviceDir}`;
                 const buildCmd = `cd ${repoPath}/${serviceDir} && docker build -t ${serviceImageName} ${buildArgs} .`;
-                await runBashWithProgress(buildCmd, res, `${serviceDir} Docker image built successfully`);
+                await runBashForDockerBuild(buildCmd, res, `${serviceDir} Docker image built successfully`, 4, totalSteps);
             }
             
             // Run the main service (prioritize frontend, then first available)
             let mainService = repoStructure.dockerfiles.find(dir => dir === 'frontend') || repoStructure.dockerfiles[0];
             const mainImageName = `${config.imageName}-${mainService}`;
             const runCmd = `docker rm -f ${config.containerName} || true && docker run -d --name ${config.containerName} --network ${networkName} -p ${config.port}:${config.port} ${mainImageName}`;
-            await runBashWithProgress(runCmd, res, 'Main container started successfully');
+            await runBashWithProgress(runCmd, res, 'Main container started successfully', 5, totalSteps);
         }
         // Fallback 3: Try to find any Dockerfile and build it
         else {
@@ -570,10 +654,10 @@ NODE_ENV=production`;
                     console.log(`📦 Found Dockerfile at: ${dockerfileDir}`);
                     
                     const buildCmd = `cd ${dockerfileDir} && docker build -t ${config.imageName} ${buildArgs} .`;
-                    await runBashWithProgress(buildCmd, res, 'Docker image built successfully');
+                    await runBashForDockerBuild(buildCmd, res, 'Docker image built successfully', 4, totalSteps);
                     
                     const runCmd = `docker rm -f ${config.containerName} || true && docker run -d --name ${config.containerName} --network ${networkName} -p ${config.port}:${config.port} ${config.imageName}`;
-                    await runBashWithProgress(runCmd, res, 'Container started successfully');
+                    await runBashWithProgress(runCmd, res, 'Container started successfully', 5, totalSteps);
                 } else {
                     throw new Error('No Dockerfile found in repository');
                 }
@@ -620,11 +704,11 @@ const installWithProgress = async (req, res) => {
 
         // Step 1: Clean up existing repository
         console.log('🧹 Cleaning up existing repository...');
-        await runBashWithProgress(`rm -rf ${repoPath}`, res, 'Repository cleanup completed');
+        await runBashWithProgress(`rm -rf ${repoPath}`, res, 'Repository cleanup completed', 1, totalSteps);
 
         // Step 2: Clone repository
         console.log('📥 Cloning repository from GitHub...');
-        await runBashWithProgress(`git clone -b ${config.branchName} ${config.repoUrl} ${repoPath}`, res, 'Repository cloned successfully');
+        await runBashWithProgress(`git clone -b ${config.branchName} ${config.repoUrl} ${repoPath}`, res, 'Repository cloned successfully', 2, totalSteps);
 
         // Step 3-5: Install based on service type
         if (config.installType === 'docker') {
@@ -637,9 +721,33 @@ const installWithProgress = async (req, res) => {
 
         // Final success message
         console.log(`✅ Installation completed successfully! Your ${config.repoName} solution is now running at http://localhost:${config.port}`);
+        
+        // Send final success message to frontend
+        if (res && res.write) {
+            res.write(`data: ${JSON.stringify({ 
+                type: 'success', 
+                message: `Installation completed successfully! Your ${config.repoName} solution is now running at http://localhost:${config.port}`,
+                url: `http://localhost:${config.port}`,
+                step: totalSteps,
+                totalSteps: totalSteps,
+                finish: true
+            })}\n\n`);
+        }
+        
         return { success: true, port: config.port, solutionType };
     } catch (error) {
         console.error(`❌ Installation failed: ${error.message}`);
+        
+        // Send error message to frontend
+        if (res && res.write) {
+            res.write(`data: ${JSON.stringify({ 
+                type: 'error', 
+                message: `Installation failed: ${error.message}`,
+                error: error.message,
+                finish: true
+            })}\n\n`);
+        }
+        
         handleError(error, 'Error - solutionInstallWithProgress');
         throw error;
     }

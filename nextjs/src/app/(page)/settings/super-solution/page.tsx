@@ -300,47 +300,51 @@ const SuperSolutionPage = () => {
         // If no solutionType provided, get it from selectedApp
         const finalSolutionType = solutionType || (selectedApp ? getSolutionTypeFromAppName(selectedApp.name) : 'ai-doc-editor');
         console.log('SuperSolution handleInstall - solutionType:', solutionType, 'selectedApp:', selectedApp?.name, 'finalSolutionType:', finalSolutionType);
+        
+        // Disable button immediately
+        setLoadingDownloadSolution(true);
+        
         try {
-            setLoadingDownloadSolution(true);
-            // Directly connect to the progress endpoint to avoid double execution
-            const token = await getAccessToken();
             const baseUrl = `${LINK.COMMON_NODE_API_URL}${NODE_API_PREFIX}`;
-            const url = `${baseUrl}/web/solution-install-progress/progress?token=${encodeURIComponent(token)}&solutionType=${encodeURIComponent(finalSolutionType)}`;
-
-            // Create EventSource for SSE
-            const eventSource = new EventSource(url);
-
-            eventSource.onopen = () => {
-                console.log('SSE connection opened for', solutionType);
-            };
-
-            eventSource.onmessage = (event) => {
+            const url = `${baseUrl}/web/solution-install-progress/progress?solutionType=${encodeURIComponent(finalSolutionType)}`;
+            
+            // Trigger the installation
+            fetch(url, { method: 'GET' }).catch(error => {
+                console.log('Installation triggered:', error);
+            });
+            
+            // Start polling to check if process is complete
+            const pollInterval = setInterval(async () => {
                 try {
-                    const data = JSON.parse(event.data);
-                    console.log('Installation progress:', data);
+                    // Check if containers are running (simple health check)
+                    const healthUrl = `${baseUrl}/web/solution-install-progress/health?solutionType=${encodeURIComponent(finalSolutionType)}`;
+                    const response = await fetch(healthUrl);
                     
-                    // Handle completion
-                    if (data.type === 'success') {
-                        setLoadingDownloadSolution(false);
-                        eventSource.close();
-                        // Show success message
-                        console.log('Installation completed successfully!', data.url);
-                    } else if (data.type === 'error') {
-                        setLoadingDownloadSolution(false);
-                        eventSource.close();
-                        console.error('Installation failed:', data.message);
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log('Health check status:', data.status);
+                        
+                        if (data.status === 'running') {
+                            setLoadingDownloadSolution(false);
+                            clearInterval(pollInterval);
+                            console.log('Installation completed - button enabled');
+                        } else if (data.status === 'installing') {
+                            console.log('Installation still in progress...');
+                        }
                     }
                 } catch (error) {
-                    console.error('Error parsing SSE data:', error);
+                    // Ignore health check errors, continue polling
+                    console.log('Health check error:', error);
                 }
-            };
-
-            eventSource.onerror = (error) => {
-                console.error('SSE connection error:', error);
+            }, 10000); // Check every 10 seconds (increased interval)
+            
+            // Fallback timeout after 10 minutes
+            setTimeout(() => {
                 setLoadingDownloadSolution(false);
-                eventSource.close();
-            };
-
+                clearInterval(pollInterval);
+                console.log('Installation timeout - button re-enabled');
+            }, 10 * 60 * 1000); // 10 minutes
+            
         } catch (error) {
             console.error('solution-install error:', error);
             setLoadingDownloadSolution(false);
