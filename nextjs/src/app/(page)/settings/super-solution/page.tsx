@@ -275,7 +275,7 @@ const SuperSolutionPage = () => {
         }
     };
 
-    const [loadingDownloadSolution, setLoadingDownloadSolution] = useState(false);
+    const [loadingSolutions, setLoadingSolutions] = useState<{ [key: string]: boolean }>({});
 
     // Mapping from app names to solution types
     const getSolutionTypeFromAppName = (appName: string): string => {
@@ -301,8 +301,8 @@ const SuperSolutionPage = () => {
         const finalSolutionType = solutionType || (selectedApp ? getSolutionTypeFromAppName(selectedApp.name) : 'ai-doc-editor');
         console.log('SuperSolution handleInstall - solutionType:', solutionType, 'selectedApp:', selectedApp?.name, 'finalSolutionType:', finalSolutionType);
         
-        // Disable button immediately
-        setLoadingDownloadSolution(true);
+        // Disable button immediately for this specific solution
+        setLoadingSolutions(prev => ({ ...prev, [finalSolutionType]: true }));
         
         try {
             const baseUrl = `${LINK.COMMON_NODE_API_URL}${NODE_API_PREFIX}`;
@@ -325,7 +325,7 @@ const SuperSolutionPage = () => {
                         console.log('Health check status:', data.status);
                         
                         if (data.status === 'running') {
-                            setLoadingDownloadSolution(false);
+                            setLoadingSolutions(prev => ({ ...prev, [finalSolutionType]: false }));
                             clearInterval(pollInterval);
                             console.log('Installation completed - button enabled');
                         } else if (data.status === 'installing') {
@@ -340,14 +340,14 @@ const SuperSolutionPage = () => {
             
             // Fallback timeout after 10 minutes
             setTimeout(() => {
-                setLoadingDownloadSolution(false);
+                setLoadingSolutions(prev => ({ ...prev, [finalSolutionType]: false }));
                 clearInterval(pollInterval);
                 console.log('Installation timeout - button re-enabled');
             }, 10 * 60 * 1000); // 10 minutes
             
         } catch (error) {
             console.error('solution-install error:', error);
-            setLoadingDownloadSolution(false);
+            setLoadingSolutions(prev => ({ ...prev, [finalSolutionType]: false }));
         }
     };
 
@@ -511,9 +511,9 @@ const SuperSolutionPage = () => {
                                 </div>
                                 {selectedApp.name} - Access Management
                                 <div className="flex gap-2">
-                                    <Button className="inline-flex items-center cursor-pointer px-2 py-1 rounded-md bg-white border border-b8 hover:bg-b11 transition ease-in-out duration-150" onClick={() => handleInstall()} disabled={loadingDownloadSolution}>
+                                    <Button className="inline-flex items-center cursor-pointer px-2 py-1 rounded-md bg-white border border-b8 hover:bg-b11 transition ease-in-out duration-150" onClick={() => handleInstall()} disabled={loadingSolutions[getSolutionTypeFromAppName(selectedApp?.name || '')] || false}>
                                         <DownloadIcon className="w-4 h-4 mr-2" />
-                                        {loadingDownloadSolution ? 'Installing...' : getInstallButtonText(selectedApp?.name || '')}
+                                        {loadingSolutions[getSolutionTypeFromAppName(selectedApp?.name || '')] ? 'Installing...' : getInstallButtonText(selectedApp?.name || '')}
                                     </Button>
                                 </div>
                             </DialogTitle>
