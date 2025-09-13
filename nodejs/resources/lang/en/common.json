@@ -32,6 +32,7 @@
         "alreadyTaken": "{module} is already taken.",
         "toggle":"{module} successfully",
         "unAuthorized":"You're unAuthorized to access this {module}",
+        "authorized":"You're authorized to access this {module}",
         "storageRequestAccept":"Storage request accepted successfully",
         "storageRequestDecline":"Storage request declined successfully",
         "storageRequestUpdateError":"Error occured while update storage request",
