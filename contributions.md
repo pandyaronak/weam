@@ -28,12 +28,12 @@
 
 ## 🏆 Team 3
 
-- **Repository Link:** [Repo URL]
+- **Repository Link:** [https://github.com/weam-ai/t3]
 
 ### 👥 Members
 | Name | GitHub Profile |
 |------|----------------|
-| Member 1 | [@username](https://github.com/username) |
+| Member 1 | [@pandyaronak](https://github.com/pandyaronak) |
 | Member 2 | [@username](https://github.com/username) |
 | Member 3 | [@username](https://github.com/username) |
 | Member 3 | [@username](https://github.com/username) |
