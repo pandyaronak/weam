@@ -282,7 +282,8 @@ const SuperSolutionPage = () => {
         const mapping: { [key: string]: string } = {
             'AI Docs': 'ai-doc-editor',
             'SEO Content Gen': 'seo-content-gen',
-            'Foloup': 'followup'
+            'Foloup': 'followup',
+            'AI Landing Page Generator': 'ai-landing-page-generator'
         };
         return mapping[appName] || 'ai-doc-editor';
     };
@@ -291,7 +292,8 @@ const SuperSolutionPage = () => {
         const mapping: { [key: string]: string } = {
             'AI Docs': 'Install AI Doc Editor',
             'SEO Content Gen': 'Install SEO Content Gen',
-            'Foloup': 'Install Foloup Agent'
+            'Foloup': 'Install Foloup Agent',
+            'AI Landing Page Generator': 'Install AI Landing Page Generator'
         };
         return mapping[appName] || 'Install Solution';
     };

@@ -16,6 +16,15 @@
         "category": "Productivity & Document Management",
         "isActive": true,
         "pathToOpen": "/followup",
+        "sequence": 2
+      },
+      {
+        "name": "AI Landing Page Generator",
+        "description": "Transform your designs into stunning landing pages with AI-powered content",
+        "icon": "document-edit-icon",
+        "category": "Productivity & Document Management",
+        "isActive": true,
+        "pathToOpen": "/ai-landing-page-generator",
         "sequence": 3
       }
     ]

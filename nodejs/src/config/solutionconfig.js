@@ -6,7 +6,7 @@ const SOLUTION_CONFIGS = {
         containerName: 'ai-doc-editor-container',
         port: '3002',
         branchName: 'main',
-        installType: 'docker', // docker or docker-compose
+        installType: 'docker-compose', // docker or docker-compose
         envFile: 'env.example'
     },
     // 'seo-content-gen': {
@@ -29,6 +29,17 @@ const SOLUTION_CONFIGS = {
         branchName: 'main',
         installType: 'docker-compose', // docker or docker-compose
         envFile: '.env.example', // Has .env.example file that needs to be converted to .env
+        additionalPorts: [] // No additional ports specified
+    },
+    'ai-landing-page-generator': {
+        repoUrl: 'https://github.com/devweam-ai/landing-page-content-generator.git',
+        repoName: 'landing-page-content-generator',
+        imageName: 'landing-page-content-generator-img',
+        containerName: 'landing-page-content-generator-container',
+        port: '4001',
+        branchName: 'devops',
+        installType: 'docker-compose', // docker or docker-compose
+        envFile: 'example.env', // Has .env.example file that needs to be converted to .env
         additionalPorts: [] // No additional ports specified
     }
 };

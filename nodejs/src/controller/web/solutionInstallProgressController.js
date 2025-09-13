@@ -68,7 +68,7 @@ const checkInstallationHealth = catchAsync(async (req, res) => {
                 const containerLines = stdout.trim().split('\n').filter(line => line.trim());
                 const solutionContainer = containerLines.find(line => {
                     const [name, status] = line.split(' ', 2);
-                    return (name.includes(solutionType) || name.includes('foloup') || name.includes('ai-doc')) 
+                    return (name.includes(solutionType) || name.includes('foloup') || name.includes('ai-doc') || name.includes('landing-page')) 
                            && status.includes('Up');
                 });
                 
